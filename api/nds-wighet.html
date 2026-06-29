@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Расчёт НДС</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 11px; background: #f8f9fd; padding: 12px; color: #111827; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #e5e7eb; flex-wrap: wrap; gap: 6px; }
+.title { font-size: 14px; font-weight: 700; }
+.controls { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+select { font-size: 11px; border: 1px solid #d1d5db; border-radius: 4px; padding: 3px 8px; color: #374151; background: #fff; cursor: pointer; }
+#refresh-btn { background: none; border: 1px solid #d1d5db; color: #6b7280; font-size: 11px; padding: 2px 8px; border-radius: 4px; cursor: pointer; }
+#refresh-btn:hover { background: #f3f4f6; }
+#status { font-size: 10px; color: #d97706; white-space: nowrap; }
+#content { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 11px; }
+th, td { white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <span class="title">&#9783; Расчёт НДС</span>
+    <span style="font-size:10px;color:#9ca3af;margin-left:8px">ВСИП + ТТ · Aspro Cloud PLS</span>
+  </div>
+  <div class="controls">
+    <select id="qsel"></select>
+    <span id="status">&#9679; инициализация...</span>
+    <button id="refresh-btn" title="Обновить">&#8635;</button>
+  </div>
+</div>
+
+<div id="content">
+  <div style="padding:24px;text-align:center;color:#9ca3af">&#8987; Загрузка данных...</div>
+</div>
+
+<script>
+(function () {
+'use strict';
+
+// ── Справочники проектов ──────────────────────────────────────────────────────
+var PID_MAP = {
+  1:'Кемерово',    6:'Десногорск',   12:'Киров',         23:'Сыктывкар',
+  13:'Барнаул',    9:'Рузаевка',      3:'Ю-Сахалинск',   25:'Ю-Сахалинск',
+  7:'Иволгинск',  10:'Б. Болдино',   33:'Голутвинский',
+  2:'Центр. договор', 18:'Центр. договор', 19:'Центр. договор',
+  29:'Центр. договор', 30:'Центр. договор', 31:'Центр. договор', 32:'Центр. договор',
+  4:'Прочие', 17:'Прочие', 20:'Прочие', 21:'Прочие', 22:'Прочие',
+  24:'ОХР (ВСИП+ТТ)', 26:'ОХР (ВСИП+ТТ)',
+  27:'Трансферы'
+};
+var TR_PID = 27;   // проект переводов ВСИП ↔ ТТ
+
+// ── Квартальный селектор ─────────────────────────────────────────────────────
+var now  = new Date();
+var curY = now.getFullYear();
+var curQ = Math.ceil((now.getMonth() + 1) / 3);
+var qSel = document.getElementById('qsel');
+
+(function buildSel() {
+  for (var y = curY; y >= curY - 1; y--) {
+    for (var q = 4; q >= 1; q--) {
+      if (y === curY && q > curQ) continue;
+      var opt = document.createElement('option');
+      opt.value = y + ':' + q;
+      opt.textContent = 'К' + q + ' ' + y;
+      if (y === curY && q === curQ) opt.selected = true;
+      qSel.appendChild(opt);
+    }
+  }
+})();
+
+function getRange(y, q) {
+  var s0 = [y+'-01-01', y+'-04-01', y+'-07-01', y+'-10-01'][q-1];
+  var s1 = [y+'-03-31', y+'-06-30', y+'-09-30', y+'-12-31'][q-1];
+  return { s0:s0, s1:s1, label:'К'+q+' '+y };
+}
+
+// ── API ──────────────────────────────────────────────────────────────────────
+function fetchPage(qs) {
+  return fetch('/api/data?' + qs)
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(d) {
+      if (d.error) throw new Error(JSON.stringify(d.error));
+      return {
+        items: (d.response && d.response.items) || [],
+        total: (d.response && d.response.total) || 0
+      };
+    });
+}
+
+function fetchAllPls(range) {
+  var all = [], page = 1;
+  function next() {
+    var p = new URLSearchParams();
+    p.append('entity', 'transaction_pls');
+    p.append('filter[date][start_date]', range.s0);
+    p.append('filter[date][end_date]',   range.s1);
+    p.append('filter[category_id]',      '1000,3144');
+    p.append('limit', '100');
+    p.append('page',  String(page));
+    return fetchPage(p.toString()).then(function(d) {
+      all = all.concat(d.items);
+      if (all.length >= d.total || d.items.length < 100) return all;
+      page++;
+      return next();
+    });
+  }
+  return next();
+}
+
+// ── Расчёт ──────────────────────────────────────────────────────────────────
+function calc(items) {
+  //  v = ВСИП (org_id=1), t = ТТ (org_id=2)
+  //  cat=1000  → НДС начисленный (income)
+  //  cat=3144  → НДС к вычету (outcome)
+  var v = { incVat:0, trVatOut:0, expVat:0, byProj:{} };
+  var t = { incVat:0, trVatIn:0,  expVat:0, byProj:{} };
+
+  items.forEach(function(r) {
+    var oid = r.org_id;
+    var pid = r.project_id;
+    var inc = parseFloat(r.income)  || 0;
+    var out = parseFloat(r.outcome) || 0;
+    var pn  = PID_MAP[pid] || 'Прочие';
+
+    if (r.category_id === 1000) {
+      // НДС начисленный
+      if (oid === 1) {
+        if (pid === TR_PID) v.trVatOut += inc;   // ВСИП → ТТ
+        else                v.incVat   += inc;   // выручка ВСИП
+      } else if (oid === 2) {
+        if (pid === TR_PID) t.trVatIn  += inc;   // ТТ ← ВСИП
+        else                t.incVat   += inc;   // прочая выручка ТТ
+      }
+    } else if (r.category_id === 3144) {
+      // НДС к вычету
+      if (oid === 1) { v.expVat += out; v.byProj[pn] = (v.byProj[pn]||0) + out; }
+      if (oid === 2) { t.expVat += out; t.byProj[pn] = (t.byProj[pn]||0) + out; }
+    }
+  });
+
+  v.totDed = v.trVatOut + v.expVat;
+  v.bal    = v.incVat - v.totDed;
+
+  t.totInc = t.trVatIn + t.incVat;
+  t.totDed = t.expVat;
+  t.bal    = t.totInc - t.totDed;
+
+  // Группа: переводы взаимно уничтожаются
+  var g = {
+    incVat: v.incVat + t.incVat,    // только внешняя выручка
+    expVat: v.expVat + t.expVat,    // все расходы
+    bal:    v.bal + t.bal
+  };
+
+  return { v:v, t:t, g:g, cnt:items.length };
+}
+
+// ── Форматирование ───────────────────────────────────────────────────────────
+function fmtN(v) {
+  if (!v) return '<span style="color:#d1d5db">—</span>';
+  var s = Math.abs(v).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return v < 0 ? '<span style="color:#dc2626">(' + s + ')</span>' : s;
+}
+function fmtBal(v) {
+  if (v === 0) return '<span style="color:#9ca3af">0</span>';
+  var s = Math.abs(v).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  var c = v > 0 ? '#dc2626' : '#059669';
+  var w = v < 0 ? '(' + s + ')' : s;
+  return '<strong style="color:' + c + '">' + w + '</strong>';
+}
+function tagStr(v) {
+  if (Math.abs(v) < 1) return '';
+  return '<br><span style="font-size:9px;color:#9ca3af;font-weight:400">'
+       + (v > 0 ? 'к уплате' : 'к возмещению') + '</span>';
+}
+var DASH = '<span style="color:#d1d5db">—</span>';
+
+// ── Построение таблицы ───────────────────────────────────────────────────────
+function buildTable(res, label) {
+  var v = res.v, t = res.t, g = res.g;
+
+  var SEP = ';border-left:2px solid #3d5c7a';
+  var BT  = ';border-top:1px solid #d1d9e8';
+  var BT2 = ';border-top:2px solid #4a6a8a';
+
+  function TH(txt, s) {
+    return '<th style="padding:5px 8px;text-align:right;border-bottom:2px solid #3d5c7a;'
+         + 'font-size:10px;font-weight:600;white-space:nowrap' + (s||'') + '">' + txt + '</th>';
+  }
+  function THl(txt, s) {
+    return '<th style="padding:5px 8px;text-align:left;border-bottom:2px solid #3d5c7a;'
+         + 'font-size:10px;font-weight:600' + (s||'') + '">' + txt + '</th>';
+  }
+  function TD(v, s) {
+    return '<td style="padding:3px 8px;text-align:right;border-bottom:1px solid #f0f0f0;'
+         + 'white-space:nowrap' + (s||'') + '">' + v + '</td>';
+  }
+  function TDl(v, s) {
+    return '<td style="padding:3px 8px;border-bottom:1px solid #f0f0f0;'
+         + 'white-space:nowrap' + (s||'') + '">' + v + '</td>';
+  }
+
+  function SEC(txt, bg, col, bdr) {
+    return '<tr style="background:' + bg + '"><td colspan="4" style="'
+         + 'padding:5px 8px;font-weight:700;font-size:11px;color:' + col
+         + ';border-top:2px solid ' + bdr + ';border-bottom:1px solid ' + bdr + '">'
+         + txt + '</td></tr>';
+  }
+
+  // Строка данных: 4 ячейки — метка, ВСИП, ТТ, Группа
+  function ROW(lbl, vv, tt, gg, indent) {
+    var lab = (indent ? '<span style="color:#6b7280">▪</span> ' : '') + lbl;
+    return '<tr>'
+      + TDl(lab, indent ? ';padding-left:20px;color:#374151' : '')
+      + TD(fmtN(vv))
+      + TD(fmtN(tt), SEP)
+      + TD(gg === null ? DASH : fmtN(gg), SEP)
+      + '</tr>';
+  }
+
+  // Итоговая строка секции
+  function SUBTOT(lbl, vv, tt, gg, bg) {
+    return '<tr style="background:' + (bg||'#eef4fb') + '">'
+      + TDl('<strong>' + lbl + '</strong>', BT)
+      + TD('<strong>' + fmtN(vv) + '</strong>', BT)
+      + TD('<strong>' + fmtN(tt) + '</strong>', SEP + BT)
+      + TD('<strong>' + (gg === null ? DASH : fmtN(gg)) + '</strong>', SEP + BT)
+      + '</tr>';
+  }
+
+  // Строка баланса
+  function BAL(lbl, vv, tt, gg) {
+    return '<tr style="background:#1e3a5f">'
+      + TDl('<strong style="color:#fff">' + lbl + '</strong>', BT2)
+      + TD(fmtBal(vv) + tagStr(vv), ';color:#fff' + BT2)
+      + TD(fmtBal(tt) + tagStr(tt), ';color:#fff' + SEP + BT2)
+      + TD(fmtBal(gg) + tagStr(gg), ';color:#fff' + SEP + BT2)
+      + '</tr>';
+  }
+
+  // ── Разбивка по проектам ─────────────────────────────────────────────────
+  var allProj = {};
+  Object.keys(v.byProj).forEach(function(k) { allProj[k] = 1; });
+  Object.keys(t.byProj).forEach(function(k) { allProj[k] = 1; });
+  var projRows = Object.keys(allProj).sort().map(function(p) {
+    var pv = v.byProj[p] || 0;
+    var pt = t.byProj[p] || 0;
+    return '<tr>'
+      + '<td style="padding:2px 8px 2px 20px;border-bottom:1px solid #f8f8f8;'
+      + 'font-size:10px;color:#374151">' + p + '</td>'
+      + '<td style="padding:2px 8px;text-align:right;border-bottom:1px solid #f8f8f8;font-size:10px">'
+      + (pv ? fmtN(pv) : DASH) + '</td>'
+      + '<td style="padding:2px 8px;text-align:right;border-bottom:1px solid #f8f8f8;'
+      + 'font-size:10px' + SEP + '">' + (pt ? fmtN(pt) : DASH) + '</td>'
+      + '<td style="padding:2px 8px;text-align:right;border-bottom:1px solid #f8f8f8;'
+      + 'font-size:10px' + SEP + '">' + fmtN(pv + pt) + '</td>'
+      + '</tr>';
+  }).join('');
+
+  // ── Сборка таблицы ───────────────────────────────────────────────────────
+  return '<table style="width:100%;border-collapse:collapse;font-size:11px">'
+    // Заголовок
+    + '<thead>'
+    + '<tr style="background:#1e3a5f;color:#fff">'
+    + THl('Показатель', ';min-width:200px')
+    + TH('ВСИП, ₽')
+    + TH('ТТ, ₽', SEP)
+    + TH('Группа, ₽', SEP)
+    + '</tr></thead>'
+    + '<tbody>'
+
+    // ── НДС НАЧИСЛЕННЫЙ ──────────────────────────────────────────────────
+    + SEC('НДС НАЧИСЛЕННЫЙ (выходящий)', '#dce7f5', '#1e3a5f', '#b8ccdf')
+    + ROW('НДС с выручки',               v.incVat, t.incVat, g.incVat, true)
+    + ROW('НДС по переводам ВСИП → ТТ', v.trVatOut, t.trVatIn, null, true)
+    + SUBTOT('Итого начислен', v.incVat + v.trVatOut, t.totInc, g.incVat, '#e8f0fb')
+
+    // ── НДС К ВЫЧЕТУ ─────────────────────────────────────────────────────
+    + SEC('НДС К ВЫЧЕТУ (входящий)', '#fae8e8', '#7f1d1d', '#f4b8b8')
+    + ROW('НДС с расходов',                      v.expVat, t.expVat, g.expVat, true)
+    + ROW('НДС по переводам (зачёт)',             v.trVatOut, null, null, true)
+    + SUBTOT('Итого к вычету', v.totDed, t.totDed, g.expVat, '#fef2f2')
+
+    // ── РАЗБИВКА РАСХОДОВ ────────────────────────────────────────────────
+    + SEC('РАСШИФРОВКА НДС К ВЫЧЕТУ ПО ПРОЕКТАМ', '#f0f4ff', '#3730a3', '#c7d2fe')
+    + projRows
+
+    // ── БАЛАНС ───────────────────────────────────────────────────────────
+    + BAL('БАЛАНС НДС', v.bal, t.bal, g.bal)
+
+    + '</tbody></table>';
+}
+
+// ── Загрузка ─────────────────────────────────────────────────────────────────
+var loading = false;
+
+function load() {
+  if (loading) return;
+  loading = true;
+  var statusEl  = document.getElementById('status');
+  var contentEl = document.getElementById('content');
+  var parts = qSel.value.split(':');
+  var y = parseInt(parts[0], 10), q = parseInt(parts[1], 10);
+  var range = getRange(y, q);
+
+  statusEl.innerHTML = '&#9679; загрузка…';
+  statusEl.style.color = '#d97706';
+  contentEl.innerHTML = '<div style="padding:24px;text-align:center;color:#9ca3af">&#8987; Загружаем PLS данные за ' + range.label + '…</div>';
+
+  var t0 = Date.now();
+  fetchAllPls(range).then(function(items) {
+    var res = calc(items);
+    contentEl.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;'
+      + 'margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #e5e7eb">'
+      + '<span style="font-size:13px;font-weight:600">НДС — ' + range.label + '</span>'
+      + '<span style="font-size:10px;color:#9ca3af">'
+      + res.cnt + ' PLS-записей · ' + range.s0 + ' — ' + range.s1
+      + '</span></div>'
+      + buildTable(res, range.label);
+    var el = ((Date.now()-t0)/1000).toFixed(1);
+    statusEl.innerHTML = '&#9679; live · ' + el + 'с';
+    statusEl.style.color = '#059669';
+    loading = false;
+  }).catch(function(err) {
+    contentEl.innerHTML = '<div style="padding:16px;color:#dc2626">&#10060; Ошибка: ' + err.message + '</div>';
+    statusEl.textContent = '● ошибка';
+    statusEl.style.color = '#dc2626';
+    loading = false;
+  });
+}
+
+document.getElementById('refresh-btn').addEventListener('click', function() { loading = false; load(); });
+qSel.addEventListener('change', function() { loading = false; load(); });
+
+load();
+})();
+</script>
+</body>
+</html>
