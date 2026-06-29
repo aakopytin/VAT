@@ -230,11 +230,11 @@ function build(v,t,label){
   }
   // Строка баланса (цветная)
   function ROWBAL(lbl, va, ta, ga){
-    return'<tr style="background:#1e3a5f">'
-      +TDl('<strong style="color:#e0eaf6">'+lbl+'</strong>',BT)
-      +'<td style="'+P+';text-align:right;color:#fff'+S+BT+'">'+fmtC(va)+'</td>'
-      +'<td style="'+P+';text-align:right;color:#fff'+S+BT+'">'+fmtC(ta)+'</td>'
-      +'<td style="'+P+';text-align:right;color:#fff'+S+BT+'">'+fmtC(ga)+'</td>'
+    return'<tr style="background:#f0f4ff;border-top:3px solid #1e3a5f">'
+      +TDl('<strong style="color:#1e3a5f">'+lbl+'</strong>',BT)
+      +'<td style="'+P+';text-align:right'+S+BT+'">'+fmtC(va)+'</td>'
+      +'<td style="'+P+';text-align:right'+S+BT+'">'+fmtC(ta)+'</td>'
+      +'<td style="'+P+';text-align:right'+S+BT+'">'+fmtC(ga)+'</td>'
       +'</tr>';
   }
 
@@ -264,7 +264,7 @@ function build(v,t,label){
     +ROW('Итого НДС к вычету', v.totDed, t.totDed, g.totDed, false, true)
 
     // БАЛАНС НДС
-    +SEC('IV. БАЛАНС НДС','#1e3a5f','#8baed4')
+    +SEC('IV. БАЛАНС НДС','#1e3a5f','#ffffff')
     +ROW('НДС начисленный', v.incVat, t.trVat, g.incVat, true)
     +ROW('НДС к вычету', v.totDed, t.totDed, g.totDed, true)
     +ROWBAL('БАЛАНС (нач. − выч.)', v.bal, t.bal, g.bal)
