@@ -1,15 +1,11 @@
 {
   "functions": {
-    "api/index.js": {
-      "includeFiles": "api/widget.html"
-    },
     "api/nds.js": {
       "includeFiles": "api/nds-widget.html"
     }
   },
   "routes": [
     { "src": "/api/data", "dest": "/api/data.js" },
-    { "src": "/nds",      "dest": "/api/nds.js"  },
-    { "src": "/(.*)",     "dest": "/api/index.js" }
+    { "src": "/(.*)",     "dest": "/api/nds.js"  }
   ]
 }
