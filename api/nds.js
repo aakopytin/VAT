@@ -1,4 +1,4 @@
-// НДС Свод — v4
+// НДС Свод — v5
 // Методология:
 //   ВСИП ДОХОДЫ: cat=1000 org=1 (все, вкл. обратные переводы ТТ→ВСИП)
 //   ТТ ДОХОДЫ:   cat=1000 org=2 proj=27 (переводы ВСИП→ТТ)
@@ -124,11 +124,15 @@ function calc(pls){
 
     var pm=parseInt(r.plan_money_id)||0;
     var crm=parseInt(r.crm_account_id)||0;
-    var isTransfer=(crm===250); // перевод ВСИП↔ТТ — по crm_account_id=250
+    // Зеркальный перевод ВСИП↔ТТ идентифицируется с двух сторон:
+    //   ВСИП-сторона: crm_account_id=250 (ТТ — контрагент в CRM ВСИП)
+    //   ТТ-сторона:   cat=1000, org=2, proj=27, crm=837 (ВСИП — контрагент в CRM ТТ)
+    var isVsipTransfer=(crm===250);
+    var isTtIncoming=(oid===2&&cat===1000&&pid===27);
 
     // Правило включения: pm>0 и pm≠980, ИЛИ pm=0 при зеркальном переводе ВСИП↔ТТ
     if(pm===980) return;
-    if(pm===0 && !isTransfer) return;
+    if(pm===0 && !isVsipTransfer && !isTtIncoming) return;
 
     // Флаг нестандартной ставки
     if((r.name||'').indexOf('20%')>-1) warn.push('⚠ Ставка 20%: PLS #'+r.id+' '+out.toFixed(0));
@@ -137,12 +141,12 @@ function calc(pls){
       if(oid===1){
         // ВСИП: поступления с НДС (cat=1000)
         v.incVat+=inc; v.incAmt+=inc*rf;
-      } else if(oid===2&&isTransfer){
-        // ТТ: поступления от ВСИП (crm=250)
+      } else if(oid===2&&pid===27){
+        // ТТ: поступления от ВСИП (proj=27, crm=837 в CRM ТТ)
         t.trVat+=inc; t.trAmt+=inc*rf;
       }
     } else if(cat===3144&&out>0){
-      if(oid===1&&isTransfer){
+      if(oid===1&&isVsipTransfer){
         // ВСИП: НДС по переводам ВСИП→ТТ (crm=250)
         v.trVat+=out; v.trAmt+=out*rf;
       } else if(oid===1){
