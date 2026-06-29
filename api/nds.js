@@ -121,14 +121,12 @@ function calc(pls){
     var inc=parseFloat(r.income)||0, out=parseFloat(r.outcome)||0;
     var rf=rateF(r.name);
 
-    if(cat===1000&&inc>0){
-      if(oid===1){
-        // ВСИП: все поступления с НДС (клиенты + обратный перевод ТТ→ВСИП)
-        v.incVat+=inc; v.incAmt+=inc*rf;
-      } else if(oid===2&&pid===27){
-        // ТТ: переводы ВСИП→ТТ (выручка ТТ)
-        t.trVat+=inc; t.trAmt+=inc*rf;
-      }
+    if(inc>0&&(cat===1001&&oid===1)){
+      // ВСИП: поступления с НДС от клиентов (cat=1001 = НДС-сумма)
+      v.incVat+=inc; v.incAmt+=inc*rf;
+    } else if(inc>0&&cat===1000&&oid===2&&pid===27){
+      // ТТ: переводы ВСИП→ТТ (cat=1000 = НДС-сумма полученных переводов)
+      t.trVat+=inc; t.trAmt+=inc*rf;
     } else if(cat===3144&&out>0){
       if(oid===1&&pid===27){
         // ВСИП: НДС к вычету по переводам ВСИП→ТТ
@@ -274,7 +272,7 @@ function load(){
   fetchAll('transaction_pls',{
     'filter[date][start_date]':rng.s0,
     'filter[date][end_date]':rng.s1,
-    'filter[category_id]':'1000,3144'
+    'filter[category_id]':'1000,1001,3144'
   }).then(function(pls){
     var c=calc(pls);
     ctEl.innerHTML=build(c.v,c.t,rng.label);
