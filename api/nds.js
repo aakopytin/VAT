@@ -1,7 +1,7 @@
-// НДС Свод — v5
+// НДС Свод — v6
 // Методология:
 //   ВСИП ДОХОДЫ: cat=1000 org=1 (все, вкл. обратные переводы ТТ→ВСИП)
-//   ТТ ДОХОДЫ:   cat=1000 org=2 proj=27 (переводы ВСИП→ТТ)
+//   ТТ ДОХОДЫ:   cat=1000 или cat=3147, org=2 proj=27 (переводы ВСИП→ТТ)
 //   ПЕРЕВОДЫ ВСИП→ТТ: ВСИП = cat=3144 org=1 proj=27 / ТТ = cat=1000 org=2 proj=27
 //   РАСХОДЫ ВСИП: cat=3144 org=1 proj!=27
 //   РАСХОДЫ ТТ:   cat=3144 org=2 (все, вкл. обратный перевод ТТ→ВСИП)
@@ -128,7 +128,8 @@ function calc(pls){
     //   ВСИП-сторона: crm_account_id=250 (ТТ — контрагент в CRM ВСИП)
     //   ТТ-сторона:   cat=1000, org=2, proj=27, crm=837 (ВСИП — контрагент в CRM ТТ)
     var isVsipTransfer=(crm===250);
-    var isTtIncoming=(oid===2&&cat===1000&&pid===27);
+    // ТТ-сторона: cat=1000 (основной) или cat=3147 (используется для ряда платежей)
+    var isTtIncoming=(oid===2&&(cat===1000||cat===3147)&&pid===27);
 
     // Правило включения: pm>0 и pm≠980, ИЛИ pm=0 при зеркальном переводе ВСИП↔ТТ
     if(pm===980) return;
@@ -145,6 +146,9 @@ function calc(pls){
         // ТТ: поступления от ВСИП (proj=27, crm=837 в CRM ТТ)
         t.trVat+=inc; t.trAmt+=inc*rf;
       }
+    } else if(cat===3147&&inc>0&&oid===2&&pid===27){
+      // ТТ: поступления от ВСИП, записаны как cat=3147 (Налог НДС)
+      t.trVat+=inc; t.trAmt+=inc*rf;
     } else if(cat===3144&&out>0){
       if(oid===1&&isVsipTransfer){
         // ВСИП: НДС по переводам ВСИП→ТТ (crm=250)
@@ -163,6 +167,13 @@ function calc(pls){
   v.bal=v.incVat-v.totDed;
   t.totDed=t.expVat;
   t.bal=t.trVat-t.totDed;
+
+  // Проверка симметрии переводов: ВСИП НДС по переводам = ТТ НДС с поступлений
+  var trDiff=Math.abs(v.trVat-t.trVat);
+  if(trDiff>1){
+    warn.push('⚠ Асимметрия переводов ВСИП↔ТТ: Δ='+trDiff.toFixed(2)
+      +' (ВСИП '+v.trVat.toFixed(2)+' ≠ ТТ '+t.trVat.toFixed(2)+')');
+  }
 
   return{v:v,t:t,warn:warn};
 }
@@ -287,12 +298,13 @@ function load(){
   ctEl.innerHTML='<div style="padding:24px;text-align:center;color:#9ca3af">&#8987; '+rng.label+'…</div>';
   var t0=Date.now();
   var dateF={'filter[date][start_date]':rng.s0,'filter[date][end_date]':rng.s1};
-  // Два отдельных запроса: cat=1000 (поступления) и cat=3144 (расходы/переводы)
+  // Три запроса: cat=1000 (поступления), cat=3144 (расходы/переводы), cat=3147 (ТТ НДС alt)
   Promise.all([
     fetchAll('transaction_pls',Object.assign({'filter[category_id]':'1000'},dateF)),
-    fetchAll('transaction_pls',Object.assign({'filter[category_id]':'3144'},dateF))
+    fetchAll('transaction_pls',Object.assign({'filter[category_id]':'3144'},dateF)),
+    fetchAll('transaction_pls',Object.assign({'filter[category_id]':'3147'},dateF))
   ]).then(function(results){
-    var pls=results[0].concat(results[1]);
+    var pls=results[0].concat(results[1]).concat(results[2]);
     var c=calc(pls);
     var warnHtml=c.warn.length
       ?'<div style="padding:4px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;font-size:10px;color:#92400e;margin-bottom:6px">'
