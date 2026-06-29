@@ -1,14 +1,18 @@
-// НДС widget v3 — исправленная методология
-// ВСИП ПЕРЕВОДЫ: cat=3144 proj=27 (а не cat=1000 proj=27)
-// Суммы: VAT × rate_factor (без plan_money)
-// ТТ расходы: исключаем cat=3144 proj=27
+// НДС Свод — v4
+// Методология:
+//   ВСИП ДОХОДЫ: cat=1000 org=1 (все, вкл. обратные переводы ТТ→ВСИП)
+//   ТТ ДОХОДЫ:   cat=1000 org=2 proj=27 (переводы ВСИП→ТТ)
+//   ПЕРЕВОДЫ ВСИП→ТТ: ВСИП = cat=3144 org=1 proj=27 / ТТ = cat=1000 org=2 proj=27
+//   РАСХОДЫ ВСИП: cat=3144 org=1 proj!=27
+//   РАСХОДЫ ТТ:   cat=3144 org=2 (все, вкл. обратный перевод ТТ→ВСИП)
+//   Суммы = НДС × (100+rate)/rate из поля name ("Налог 22%" → 122/22)
 
 const HTML = `<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Расчёт НДС</title>
+<title>НДС — Свод</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 11px; background: #f8f9fd; padding: 12px; color: #111827; }
@@ -21,12 +25,13 @@ select { font-size: 11px; border: 1px solid #d1d5db; border-radius: 4px; padding
 #ct { overflow-x: auto; }
 .bal-box { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .bal-item { flex: 1; min-width: 140px; border-radius: 6px; padding: 8px 12px; font-size: 11px; }
+table { width: 100%; border-collapse: collapse; font-size: 11px; min-width: 620px; }
 </style>
 </head>
 <body>
 <div class="hdr">
   <div>
-    <span class="ttl">&#9783; Расчёт НДС</span>
+    <span class="ttl">&#9783; Свод НДС</span>
     <span style="font-size:10px;color:#9ca3af;margin-left:8px">ВСИП + ТТ · Aspro Cloud</span>
   </div>
   <div class="ctl">
@@ -58,7 +63,6 @@ function getRange(y,q){
   return{s0:s0,s1:s1,label:'К'+q+' '+y};
 }
 
-// API
 function fetchPage(p){
   return fetch('/api/data?'+p).then(function(r){
     if(!r.ok)throw new Error('HTTP '+r.status);
@@ -82,24 +86,35 @@ function fetchAll(entity,extra){
   return next();
 }
 
-// Ставка НДС из названия: "Налог 22%" → 22, "Налог 5%" → 5, "Налог 20%" → 20
+// Ставка из названия: "Налог 22%" → factor=122/22
 function rateF(name){
   var m=(name||'').match(/(\\d+)\\s*%/);
   var pct=m?parseInt(m[1]):22;
-  return(100+pct)/pct; // 122/22, 105/5, 120/20
+  return(100+pct)/pct;
 }
 
-// Расчёт
-// Правила маппинга:
-//   ВСИП ДОХОДЫ (incVat/incAmt):   cat=1000, org=1, proj≠27
-//   ВСИП ПЕРЕВОДЫ исх. (trVat/trAmt): cat=3144, org=1, proj=27
-//   ВСИП РАСХОДЫ (expVat/expAmt):  cat=3144, org=1, proj≠27
-//   ТТ ДОХОДЫ/ПЕРЕВОДЫ вх. (trVat/trAmt): cat=1000, org=2, proj=27
-//   ТТ РАСХОДЫ (expVat/expAmt):    cat=3144, org=2, proj≠27
-//   Остальные записи — исключаются
+/*
+  Методология (Свод НДС):
+  ДОХОДЫ:
+    ВСИП: cat=1000 org=1 (все поступления: клиенты + обратные переводы ТТ→ВСИП)
+    ТТ:   cat=1000 org=2, proj=27 (переводы ВСИП→ТТ = выручка ТТ)
+  ПЕРЕВОДЫ ВСИП→ТТ:
+    ВСИП: cat=3144 org=1, proj=27 (НДС к вычету по переводам ВСИП→ТТ)
+    ТТ:   cat=1000 org=2, proj=27 (те же переводы со стороны ТТ = совпадает с ТТ ДОХОДЫ)
+    Примечание: обратный перевод ТТ→ВСИП (cat=3144 org=2 proj=27) учтён в РАСХОДЫ ТТ.
+  РАСХОДЫ:
+    ВСИП: cat=3144 org=1, proj!=27 (прочие расходы ВСИП)
+    ТТ:   cat=3144 org=2 (все расходы ТТ: прочие + обратный перевод ТТ→ВСИП)
+  ИТОГО К ВЫЧЕТУ:
+    ВСИП: cat=3144 org=1 (все = переводы + прочие)
+    ТТ:   cat=3144 org=2 (все)
+  БАЛАНС:
+    ВСИП: cat=1000 org=1 (все) - cat=3144 org=1 (все)
+    ТТ:   cat=1000 org=2 proj=27 - cat=3144 org=2 (все)
+*/
 function calc(pls){
-  var v={incVat:0,incAmt:0,trVat:0,trAmt:0,expVat:0,expAmt:0};
-  var t={trVat:0,trAmt:0,expVat:0,expAmt:0};
+  var v={incVat:0,incAmt:0, trVat:0,trAmt:0, expVat:0,expAmt:0};
+  var t={trVat:0,trAmt:0, expVat:0,expAmt:0};
 
   pls.forEach(function(r){
     var oid=r.org_id, pid=r.project_id, cat=r.category_id;
@@ -107,149 +122,146 @@ function calc(pls){
     var rf=rateF(r.name);
 
     if(cat===1000&&inc>0){
-      if(oid===1&&pid!==27){
-        // ВСИП: поступления от клиентов с НДС
+      if(oid===1){
+        // ВСИП: все поступления с НДС (клиенты + обратный перевод ТТ→ВСИП)
         v.incVat+=inc; v.incAmt+=inc*rf;
-      }else if(oid===2&&pid===27){
-        // ТТ: поступления от переводов ВСИП→ТТ
+      } else if(oid===2&&pid===27){
+        // ТТ: переводы ВСИП→ТТ (выручка ТТ)
         t.trVat+=inc; t.trAmt+=inc*rf;
       }
-      // oid=1, proj=27 → обратный перевод ТТ→ВСИП, не в Своде
-      // oid=2, proj≠27 → прочая выручка ТТ, не в Своде
-
-    }else if(cat===3144&&out>0){
+    } else if(cat===3144&&out>0){
       if(oid===1&&pid===27){
         // ВСИП: НДС к вычету по переводам ВСИП→ТТ
         v.trVat+=out; v.trAmt+=out*rf;
-      }else if(oid===1&&pid!==27){
-        // ВСИП: НДС к вычету по прочим расходам
+      } else if(oid===1){
+        // ВСИП: прочие расходы
         v.expVat+=out; v.expAmt+=out*rf;
-      }else if(oid===2&&pid!==27){
-        // ТТ: НДС к вычету по расходам (excl. proj=27 — обратный перевод)
+      } else if(oid===2){
+        // ТТ: все расходы (прочие + обратный перевод ТТ→ВСИП)
         t.expVat+=out; t.expAmt+=out*rf;
       }
-      // oid=2, proj=27 → обратный перевод ТТ→ВСИП, не в Своде
     }
   });
 
-  v.totDed=v.trVat+v.expVat;
-  v.bal=v.incVat-v.totDed;
-  t.totDed=t.expVat;
-  t.bal=t.trVat-t.totDed;
+  v.totDed=v.trVat+v.expVat;   // ВСИП итого к вычету
+  v.bal=v.incVat-v.totDed;      // ВСИП баланс
+
+  t.totDed=t.expVat;            // ТТ итого к вычету
+  t.bal=t.trVat-t.totDed;       // ТТ баланс
+
   return{v:v,t:t};
 }
 
-// Форматирование
-function fmt(v){
-  if(!v||Math.abs(v)<0.01)return'<span style="color:#ccc">—</span>';
-  var s=Math.abs(v).toFixed(2).replace(/\\B(?=(\\d{3})+(?!\\d))/g,' ');
-  return v<0?'<span style="color:#dc2626">('+s+')</span>':s;
+function fmt(v,bold){
+  if(!v||Math.abs(v)<0.01)return'<span style="color:#d1d5db">—</span>';
+  var s=Math.abs(v).toFixed(2).replace(/\\B(?=(\\d{3})+(?!\\d))/g,' ');
+  var txt=v<0?'('+s+')':s;
+  return bold?'<strong>'+txt+'</strong>':txt;
 }
-function fmtBal(v){
+function fmtC(v){
   if(!v||Math.abs(v)<0.01)return'<span style="color:#9ca3af">0</span>';
-  var s=Math.abs(v).toFixed(2).replace(/\\B(?=(\\d{3})+(?!\\d))/g,' ');
-  var c=v>0?'#dc2626':'#059669'; // >0 = к уплате (красный), <0 = к возмещению (зеленый)
-  return'<strong style="color:'+c+'">'+(v<0?'('+s+')':s)+'</strong>';
+  var s=Math.abs(v).toFixed(2).replace(/\\B(?=(\\d{3})+(?!\\d))/g,' ');
+  var c=v>0?'#dc2626':'#059669';
+  var lbl=v>0?' (к уплате)':' (к возм.)';
+  return'<strong style="color:'+c+'">'+(v<0?'('+s+')':s)+'</strong>'
+    +'<span style="font-size:9px;color:'+c+'">'+lbl+'</span>';
 }
 
-// Таблица
+// Строим таблицу в формате листа "Свод НДС Июнь" (4 колонки)
 function build(v,t,label){
-  var SEP=';border-left:2px solid #3d5c7a';
-  var BT=';border-top:1px solid #b8ccdf';
-  var F='padding:3px 8px;border-bottom:1px solid #f0f4f8;white-space:nowrap';
+  var g={
+    incVat:v.incVat+t.trVat, incAmt:v.incAmt+t.trAmt,
+    trVat:v.trVat+t.trVat,   trAmt:v.trAmt+t.trAmt,
+    expVat:v.expVat+t.expVat, expAmt:v.expAmt+t.expAmt,
+    totDed:v.totDed+t.totDed, bal:v.bal+t.bal
+  };
 
-  function TH(x,s){return'<th style="padding:5px 8px;text-align:right;background:#1e3a5f;color:#fff;font-size:10px;font-weight:600'+(s||'')+'">'+(x||'')+'</th>';}
-  function THl(x){return'<th style="padding:5px 8px;text-align:left;background:#1e3a5f;color:#fff;font-size:10px;font-weight:600">'+x+'</th>';}
-  function TD(x,s){return'<td style="'+F+';text-align:right'+(s||'')+'">'+(x||'')+'</td>';}
-  function TDl(x,s){return'<td style="'+F+(s||'')+'">'+(x||'')+'</td>';}
+  var S=';border-left:2px solid #3d6b9f';
+  var BT=';border-top:1px solid #c3d4e8';
+  var P='padding:3px 10px;border-bottom:1px solid #eef2f7;white-space:nowrap';
 
-  function SEC(txt,bg,col){
-    return'<tr style="background:'+bg+'">'
-      +'<td colspan="7" style="padding:4px 8px;font-weight:700;font-size:11px;color:'+col+';border-top:2px solid '+col+';border-bottom:1px solid '+col+'">'+txt+'</td>'
-      +'</tr>';
+  function TH(x,s){return'<th style="padding:4px 10px;text-align:right;color:#fff;font-size:10px;font-weight:600'+(s||'')+'">'+(x||'')+'</th>';}
+  function THl(x){return'<th style="padding:4px 10px;text-align:left;color:#fff;font-size:10px;font-weight:600">'+x+'</th>';}
+  function TD(x,s,bg){return'<td style="'+P+';text-align:right'+(s||'')+(bg?';background:'+bg:'')+'">'+(x||'—')+'</td>';}
+  function TDl(x,s,bg){return'<td style="'+P+(s||'')+(bg?';background:'+bg:'')+'">'+(x||'')+'</td>';}
+
+  // Секция-заголовок
+  function SEC(txt,c1,c2){
+    return'<tr style="background:'+c1+'">'
+      +'<td colspan="4" style="padding:4px 10px;font-size:11px;font-weight:700;color:'+c2
+      +';border-top:2px solid '+c2+';border-bottom:1px solid '+c2+'">'+txt+'</td></tr>';
   }
-  function ROW(lbl,va,aa,vt,at,vg,ag){
-    var l='<span style="color:#9ca3af;margin-right:4px">▸</span>'+lbl;
-    return'<tr>'+TDl(l,';padding-left:16px')+TD(fmt(va))+TD(fmt(aa),SEP)+TD(fmt(vt),SEP)+TD(fmt(at))+TD(fmt(vg),SEP)+TD(fmt(ag))+'</tr>';
-  }
-  function ROWTOT(lbl,v1,v2,v3){
-    return'<tr style="background:#eef4fb">'
-      +TDl('<strong>'+lbl+'</strong>',''+BT)+TD('',BT)+TD('<strong>'+fmt(v1)+'</strong>',SEP+BT)+TD('',BT)+TD('<strong>'+fmt(v2)+'</strong>',SEP+BT)+TD('',BT)+TD('<strong>'+fmt(v3)+'</strong>',SEP+BT)
-      +'</tr>';
-  }
-  function ROWBAL(lbl,v1,v2,v3){
-    return'<tr style="background:#1e3a5f">'
-      +TDl('<strong style="color:#fff">'+lbl+'</strong>',BT)
-      +'<td colspan="2" style="'+F+';text-align:right;color:#fff'+SEP+BT+'">'+fmtBal(v1)+'</td>'
-      +'<td colspan="2" style="'+F+';text-align:right;color:#fff'+SEP+BT+'">'+fmtBal(v2)+'</td>'
-      +'<td colspan="2" style="'+F+';text-align:right;color:#fff'+SEP+BT+'">'+fmtBal(v3)+'</td>'
-      +'</tr>';
-  }
-  function ROWVAT(lbl,v1,v2,v3){
+  // Строка с суммой (два значения: сумма и НДС → показываем в 3 колонках)
+  // Колонки: Показатель | ВСИП | ТТ | Группа
+  function ROW(lbl, va, ta, ga, indent, bold){
+    var l=(indent?'<span style="padding-left:12px;display:inline-block"></span>':'')+lbl;
     return'<tr>'
-      +TDl('<span style="color:#9ca3af;margin-right:4px">▸</span>'+lbl,';padding-left:16px')
-      +'<td colspan="2" style="'+F+';text-align:right'+SEP+'">'+fmt(v1)+'</td>'
-      +'<td colspan="2" style="'+F+';text-align:right'+SEP+'">'+fmt(v2)+'</td>'
-      +'<td colspan="2" style="'+F+';text-align:right'+SEP+'">'+fmt(v3)+'</td>'
+      +TDl(bold?'<strong>'+l+'</strong>':l)
+      +TD(fmt(va,bold),S)
+      +TD(fmt(ta,bold),S)
+      +TD(fmt(ga,bold),S)
+      +'</tr>';
+  }
+  // Строка баланса (цветная)
+  function ROWBAL(lbl, va, ta, ga){
+    return'<tr style="background:#1e3a5f">'
+      +TDl('<strong style="color:#e0eaf6">'+lbl+'</strong>',BT)
+      +'<td style="'+P+';text-align:right;color:#fff'+S+BT+'">'+fmtC(va)+'</td>'
+      +'<td style="'+P+';text-align:right;color:#fff'+S+BT+'">'+fmtC(ta)+'</td>'
+      +'<td style="'+P+';text-align:right;color:#fff'+S+BT+'">'+fmtC(ga)+'</td>'
       +'</tr>';
   }
 
-  // GROUP values
-  var gIncVat=v.incVat, gIncAmt=v.incAmt;   // ВСИП выручка (ТТ в ДОХОДЫ не включаем)
-  // На самом деле Группа в ДОХОДЫ = ВСИП выручка + ТТ трансферы полученные
-  gIncVat+=t.trVat; gIncAmt+=t.trAmt;
-  var gTrVat=v.trVat+t.trVat, gTrAmt=v.trAmt+t.trAmt; // перевода: обе стороны
-  var gExpVat=v.expVat+t.expVat, gExpAmt=v.expAmt+t.expAmt;
-  var gTotDed=v.totDed+t.totDed;
-  var gBal=v.bal+t.bal;
-
-  var tbl='<table style="width:100%;border-collapse:collapse;font-size:11px">'
-    +'<thead><tr>'
-    +THl('Показатель')
-    +TH('НДС, ₽')+TH('Сумма, ₽',SEP)
-    +TH('НДС, ₽',SEP)+TH('Сумма, ₽')
-    +TH('НДС, ₽',SEP)+TH('Сумма, ₽')
-    +'</tr>'
-    +'<tr>'
-    +'<th style="padding:2px 8px;text-align:left;background:#0f2240;color:#8ba8c4;font-size:9px;font-weight:400;border-bottom:2px solid #3d5c7a">'+label+'</th>'
-    +'<th colspan="2" style="padding:2px 8px;text-align:center;background:#0f2240;color:#8ba8c4;font-size:9px;font-weight:400;border-left:2px solid #3d5c7a;border-bottom:2px solid #3d5c7a">ВСИП</th>'
-    +'<th colspan="2" style="padding:2px 8px;text-align:center;background:#0f2240;color:#8ba8c4;font-size:9px;font-weight:400;border-left:2px solid #3d5c7a;border-bottom:2px solid #3d5c7a">ТТ</th>'
-    +'<th colspan="2" style="padding:2px 8px;text-align:center;background:#0f2240;color:#8ba8c4;font-size:9px;font-weight:400;border-left:2px solid #3d5c7a;border-bottom:2px solid #3d5c7a">Группа</th>'
+  var tbl='<table>'
+    // Шапка: Показатель | ВСИП | ТТ | Группа
+    +'<thead><tr style="background:#1e3a5f">'
+    +THl('Показатель — '+label)
+    +TH('ВСИП, ₽',S)
+    +TH('ТИМ-ТРЕЙД, ₽',S)
+    +TH('Группа, ₽',S)
     +'</tr></thead><tbody>'
-    +SEC('ДОХОДЫ (поступления с НДС)','#dce8f5','#1e4080')
-    +ROW('Выручка',v.incVat,v.incAmt,t.trVat,t.trAmt,gIncVat,gIncAmt)
-    +SEC('ПЕРЕВОДЫ ВСИП → ТТ','#f0f4ff','#3730a3')
-    +ROW('Сумма переводов (НДС)',v.trVat,v.trAmt,t.trVat,t.trAmt,gTrVat,gTrAmt)
-    +SEC('РАСХОДЫ (с НДС)','#fdf2f2','#991b1b')
-    +ROW('Расходы',v.expVat,v.expAmt,t.expVat,t.expAmt,gExpVat,gExpAmt)
-    +ROWTOT('Итого НДС к вычету',v.totDed,t.totDed,gTotDed)
-    +SEC('БАЛАНС НДС','#1e3a5f','#8ba8c4')
-    +ROWVAT('НДС с поступлений',v.incVat,t.trVat,v.incVat+t.trVat)
-    +ROWVAT('НДС к вычету',v.totDed,t.totDed,gTotDed)
-    +ROWBAL('БАЛАНС (нач. − выч.)',v.bal,t.bal,gBal)
+
+    // ДОХОДЫ
+    +SEC('I. ДОХОДЫ (поступления с НДС)','#dbe9f8','#1e4080')
+    +ROW('Сумма поступлений', v.incAmt, t.trAmt, g.incAmt, true)
+    +ROW('НДС с поступлений', v.incVat, t.trVat, g.incVat, true)
+
+    // ПЕРЕВОДЫ
+    +SEC('II. ПЕРЕВОДЫ ВСИП → ТТ','#eff2ff','#3730a3')
+    +ROW('Сумма переводов', v.trAmt, t.trAmt, g.trAmt, true)
+    +ROW('НДС по переводам', v.trVat, t.trVat, g.trVat, true)
+
+    // РАСХОДЫ
+    +SEC('III. РАСХОДЫ (с НДС)','#fef2f2','#991b1b')
+    +ROW('Расходы с НДС', v.expAmt, t.expAmt, g.expAmt, true)
+    +ROW('НДС к вычету', v.expVat, t.expVat, g.expVat, true)
+    +ROW('Итого НДС к вычету', v.totDed, t.totDed, g.totDed, false, true)
+
+    // БАЛАНС НДС
+    +SEC('IV. БАЛАНС НДС','#1e3a5f','#8baed4')
+    +ROW('НДС начисленный', v.incVat, t.trVat, g.incVat, true)
+    +ROW('НДС к вычету', v.totDed, t.totDed, g.totDed, true)
+    +ROWBAL('БАЛАНС (нач. − выч.)', v.bal, t.bal, g.bal)
+
     +'</tbody></table>';
 
-  // Карточки итога
   function card(org,val){
     var c=val>0?'#dc2626':val<0?'#059669':'#6b7280';
     var bg=val>0?'#fff5f5':val<0?'#f0fdf4':'#f9fafb';
-    var bc=val>0?'#fecaca':val<0?'#bbf7d0':'#e5e7eb';
-    var s=Math.abs(val).toFixed(2).replace(/\\B(?=(\\d{3})+(?!\\d))/g,' ');
-    var w=val<0?'('+s+')':val>0?s:'0';
+    var bc=val>0?'#fca5a5':val<0?'#86efac':'#e5e7eb';
+    var s=Math.abs(val).toFixed(2).replace(/\\B(?=(\\d{3})+(?!\\d))/g,' ');
     var lbl=val>0?'к уплате':val<0?'к возмещению':'—';
     return'<div class="bal-item" style="background:'+bg+';border:1px solid '+bc+'">'
       +'<div style="font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">'+org+'</div>'
-      +'<div style="font-size:15px;font-weight:700;color:'+c+'">'+w+'</div>'
+      +'<div style="font-size:15px;font-weight:700;color:'+c+'">'+(val<0?'('+s+')':s)+'</div>'
       +'<div style="font-size:9px;color:'+c+';margin-top:2px">'+lbl+'</div>'
       +'</div>';
   }
-  var cards='<div class="bal-box">'+card('ВСИП',v.bal)+card('ТИМ-ТРЕЙД',t.bal)+card('ГРУППА',gBal)+'</div>';
+  var cards='<div class="bal-box">'+card('ВСИП',v.bal)+card('ТИМ-ТРЕЙД',t.bal)+card('ГРУППА',g.bal)+'</div>';
 
-  return'<div style="margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #e5e7eb;font-size:12px;font-weight:600">'+label+'</div>'
-    +tbl+cards;
+  return tbl+cards;
 }
 
-// Загрузка
 var busy=false;
 function load(){
   if(busy)return; busy=true;
@@ -281,7 +293,7 @@ load();
 })();
 </script>
 </body>
-</html>`;
+</html>\`;
 
 module.exports = function handler(req, res) {
   res.statusCode = 200;
