@@ -115,39 +115,52 @@ function rateF(name){
 function calc(pls){
   var v={incVat:0,incAmt:0, trVat:0,trAmt:0, expVat:0,expAmt:0};
   var t={trVat:0,trAmt:0, expVat:0,expAmt:0};
+  var warn=[];
 
   pls.forEach(function(r){
     var oid=r.org_id, pid=r.project_id, cat=r.category_id;
     var inc=parseFloat(r.income)||0, out=parseFloat(r.outcome)||0;
     var rf=rateF(r.name);
 
-    if(inc>0&&(cat===1001&&oid===1)){
-      // ВСИП: поступления с НДС от клиентов (cat=1001 = НДС-сумма)
-      v.incVat+=inc; v.incAmt+=inc*rf;
-    } else if(inc>0&&cat===1000&&oid===2&&pid===27){
-      // ТТ: переводы ВСИП→ТТ (cat=1000 = НДС-сумма полученных переводов)
-      t.trVat+=inc; t.trAmt+=inc*rf;
+    var pm=parseInt(r.plan_money_id)||0;
+    var crm=parseInt(r.crm_account_id)||0;
+    var isTransfer=(crm===250); // перевод ВСИП↔ТТ — по crm_account_id=250
+
+    // Правило включения: pm>0 и pm≠980, ИЛИ pm=0 при зеркальном переводе ВСИП↔ТТ
+    if(pm===980) return;
+    if(pm===0 && !isTransfer) return;
+
+    // Флаг нестандартной ставки
+    if((r.name||'').indexOf('20%')>-1) warn.push('⚠ Ставка 20%: PLS #'+r.id+' '+out.toFixed(0));
+
+    if(cat===1000&&inc>0){
+      if(oid===1){
+        // ВСИП: поступления с НДС (cat=1000)
+        v.incVat+=inc; v.incAmt+=inc*rf;
+      } else if(oid===2&&isTransfer){
+        // ТТ: поступления от ВСИП (crm=250)
+        t.trVat+=inc; t.trAmt+=inc*rf;
+      }
     } else if(cat===3144&&out>0){
-      if(oid===1&&pid===27){
-        // ВСИП: НДС к вычету по переводам ВСИП→ТТ
+      if(oid===1&&isTransfer){
+        // ВСИП: НДС по переводам ВСИП→ТТ (crm=250)
         v.trVat+=out; v.trAmt+=out*rf;
       } else if(oid===1){
         // ВСИП: прочие расходы
         v.expVat+=out; v.expAmt+=out*rf;
       } else if(oid===2){
-        // ТТ: все расходы (прочие + обратный перевод ТТ→ВСИП)
+        // ТТ: расходы
         t.expVat+=out; t.expAmt+=out*rf;
       }
     }
   });
 
-  v.totDed=v.trVat+v.expVat;   // ВСИП итого к вычету
-  v.bal=v.incVat-v.totDed;      // ВСИП баланс
+  v.totDed=v.trVat+v.expVat;
+  v.bal=v.incVat-v.totDed;
+  t.totDed=t.expVat;
+  t.bal=t.trVat-t.totDed;
 
-  t.totDed=t.expVat;            // ТТ итого к вычету
-  t.bal=t.trVat-t.totDed;       // ТТ баланс
-
-  return{v:v,t:t};
+  return{v:v,t:t,warn:warn};
 }
 
 function fmt(v,bold){
@@ -269,15 +282,22 @@ function load(){
   stEl.innerHTML='&#9679; загрузка…'; stEl.style.color='#d97706';
   ctEl.innerHTML='<div style="padding:24px;text-align:center;color:#9ca3af">&#8987; '+rng.label+'…</div>';
   var t0=Date.now();
-  fetchAll('transaction_pls',{
-    'filter[date][start_date]':rng.s0,
-    'filter[date][end_date]':rng.s1,
-    'filter[category_id]':'1000,1001,3144'
-  }).then(function(pls){
+  var dateF={'filter[date][start_date]':rng.s0,'filter[date][end_date]':rng.s1};
+  // Два отдельных запроса: cat=1000 (поступления) и cat=3144 (расходы/переводы)
+  Promise.all([
+    fetchAll('transaction_pls',Object.assign({'filter[category_id]':'1000'},dateF)),
+    fetchAll('transaction_pls',Object.assign({'filter[category_id]':'3144'},dateF))
+  ]).then(function(results){
+    var pls=results[0].concat(results[1]);
     var c=calc(pls);
-    ctEl.innerHTML=build(c.v,c.t,rng.label);
-    stEl.innerHTML='&#9679; live · '+((Date.now()-t0)/1000).toFixed(1)+'с · '+pls.length+' PLS';
-    stEl.style.color='#059669';
+    var warnHtml=c.warn.length
+      ?'<div style="padding:4px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;font-size:10px;color:#92400e;margin-bottom:6px">'
+        +c.warn.join(' · ')+'</div>'
+      :'';
+    ctEl.innerHTML=warnHtml+build(c.v,c.t,rng.label);
+    stEl.innerHTML='&#9679; live · '+((Date.now()-t0)/1000).toFixed(1)+'с · '+pls.length+' PLS'
+      +(c.warn.length?' ⚠'+c.warn.length:'');
+    stEl.style.color=c.warn.length?'#d97706':'#059669';
     busy=false;
   }).catch(function(e){
     ctEl.innerHTML='<div style="padding:16px;color:#dc2626">&#10060; '+e.message+'</div>';
