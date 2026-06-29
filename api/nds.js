@@ -293,7 +293,7 @@ load();
 })();
 </script>
 </body>
-</html>\`;
+</html>`;
 
 module.exports = function handler(req, res) {
   res.statusCode = 200;
