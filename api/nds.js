@@ -1,9 +1,9 @@
-// НДС widget entry point
+/// НДС widget entry point
 const fs   = require('fs');
 const path = require('path');
- 
-const HTML = fs.readFileSync(path.join(__dirname, 'nds.html'), 'utf8');
- 
+
+const HTML = fs.readFileSync(path.join(__dirname, 'nds-widget.html'), 'utf8');
+
 module.exports = function handler(req, res) {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
