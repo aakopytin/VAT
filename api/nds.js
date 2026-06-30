@@ -254,8 +254,11 @@ function card(lbl,nds){
 function build(V,T,lbl){
 
   // Итоговые суммы для разделов
-  var V1n=V.incNds+V.trInNds, V1a=V.incAmt+V.trInAmt;
-  var T1n=T.trInNds+T.incNds, T1a=T.trInAmt+T.incAmt;
+  // Трансферы в секции 1 = нетто (входящие − исходящие)
+  var VtrNetNds=V.trInNds-V.trOutNds, VtrNetAmt=V.trInAmt-V.trOutAmt;
+  var TtrNetNds=T.trInNds-T.trOutNds, TtrNetAmt=T.trInAmt-T.trOutAmt;
+  var V1n=V.incNds+VtrNetNds, V1a=V.incAmt+VtrNetAmt;
+  var T1n=T.incNds+TtrNetNds, T1a=T.incAmt+TtrNetAmt;
   var V3n=V.expNds, V3a=V.expAmt;
   var T3n=T.expNds, T3a=T.expAmt;
 
@@ -316,8 +319,8 @@ function build(V,T,lbl){
 
     // ── 1. ПОСТУПЛЕНИЯ ──────────────────────────────────────────────────
     +SEC('1. ПОСТУПЛЕНИЯ С НДС','s1')
-    +ROW('  Оказание услуг (клиенты)',V.incAmt,V.incNds,T.incAmt,T.incNds,null,true)
-    +ROW('  Трансферы (входящие)',V.trInAmt,V.trInNds,T.trInAmt,T.trInNds,null,true)
+    +ROW('  Поступления + возвраты',V.incAmt,V.incNds,T.incAmt,T.incNds,null,true)
+    +ROW('  Трансферы (нетто)',VtrNetAmt,VtrNetNds,TtrNetAmt,TtrNetNds,null,true)
     +ROW('ИТОГО поступлений',V1a,V1n,T1a,T1n,'tot')
 
     // ── 2. ТРАНСФЕРЫ ────────────────────────────────────────────────────
@@ -330,7 +333,7 @@ function build(V,T,lbl){
 
     // ── 3. РАСХОДЫ ──────────────────────────────────────────────────────
     +SEC('3. РАСХОДЫ С НДС  (без трансферов)','s3')
-    +ROW('  Материалы',V.expAmt,V.expNds,T.expAmt,T.expNds,null,true)
+    +ROW('  Материалы+СМР+Прочие',V.expAmt,V.expNds,T.expAmt,T.expNds,null,true)
     // ТТ расходы — все Материалы по данным. ВСИП — суммарно без разбивки (разбивка в Excel)
     +ROW('ИТОГО расходов',V3a,V3n,T3a,T3n,'tot')
 
