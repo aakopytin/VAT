@@ -261,6 +261,9 @@ function build(V,T,lbl){
   var T1n=T.incNds+TtrNetNds, T1a=T.incAmt+TtrNetAmt;
   var V3n=V.expNds, V3a=V.expAmt;
   var T3n=T.expNds, T3a=T.expAmt;
+  // НДС свод: ВСИП Оплаты = нетто-отток трансферов + расходы; ТТ Поступления = доход + нетто-приток
+  var VoplNds=(-VtrNetNds)+V.expNds;   // (trOut−trIn) + expNds
+  var TpstNds=T.incNds+TtrNetNds;      // incNds + (trIn−trOut)
 
   function SEC(txt,cls,cnt){
     var cntHtml=cnt!=null?' <span class="cnt">'+cnt+'</span>':'';
@@ -345,21 +348,21 @@ function build(V,T,lbl){
     +'<td class="bl zero dim">—</td><td class="bl dim">ТТ НДС, ₽</td>'
     +'<td class="bl dim">Нетто НДС, ₽</td>'
     +'</tr>'
-    // ВСИП: Поступления = incNds; Оплаты = нетто трансферов + расходы
-    // ТТ:   Поступления = incNds + нетто трансферов; Оплаты = расходы
-    +ROWNDS('НДС с Поступлений',V.incNds,T.incNds+TtrNetNds)
-    +ROWNDS('НДС с Оплат',VtrNetNds+V.expNds,T.expNds)
+    // ВСИП: Поступления = incNds; Оплаты = (trOut−trIn) + expNds
+    // ТТ:   Поступления = incNds + (trIn−trOut); Оплаты = expNds
+    +ROWNDS('НДС с Поступлений',V.incNds,TpstNds)
+    +ROWNDS('НДС с Оплат',VoplNds,T.expNds)
     +ROWNDSBAL('ИТОГО НДС (+ к уплате, − к возм.)',
-               V.incNds-(VtrNetNds+V.expNds),
-               (T.incNds+TtrNetNds)-T.expNds)
+               V.incNds-VoplNds,
+               TpstNds-T.expNds)
 
     +'</tbody></table>'
 
     // ── КАРТОЧКИ ────────────────────────────────────────────────────────
     +'<div class="cards">'
-    +card('ВСИП',V.incNds-(VtrNetNds+V.expNds))
-    +card('ТИМ-ТРЕЙД',(T.incNds+TtrNetNds)-T.expNds)
-    +card('ГРУППА',(V.incNds-(VtrNetNds+V.expNds))+((T.incNds+TtrNetNds)-T.expNds))
+    +card('ВСИП',V.incNds-VoplNds)
+    +card('ТИМ-ТРЕЙД',TpstNds-T.expNds)
+    +card('ГРУППА',(V.incNds-VoplNds)+(TpstNds-T.expNds))
     +'</div>';
 }
 
