@@ -345,17 +345,21 @@ function build(V,T,lbl){
     +'<td class="bl zero dim">—</td><td class="bl dim">ТТ НДС, ₽</td>'
     +'<td class="bl dim">Нетто НДС, ₽</td>'
     +'</tr>'
-    +ROWNDS('НДС с Поступлений (к уплате)',V.incNds,T.incNds)
-    +ROWNDS('НДС с Оплат (к возмещению)',V.expNds,T.expNds)
-    +ROWNDSBAL('ИТОГО НДС (+ к уплате, − к возм.)',V.incNds-V.expNds,T.incNds-T.expNds)
+    // ВСИП: Поступления = incNds; Оплаты = нетто трансферов + расходы
+    // ТТ:   Поступления = incNds + нетто трансферов; Оплаты = расходы
+    +ROWNDS('НДС с Поступлений',V.incNds,T.incNds+TtrNetNds)
+    +ROWNDS('НДС с Оплат',VtrNetNds+V.expNds,T.expNds)
+    +ROWNDSBAL('ИТОГО НДС (+ к уплате, − к возм.)',
+               V.incNds-(VtrNetNds+V.expNds),
+               (T.incNds+TtrNetNds)-T.expNds)
 
     +'</tbody></table>'
 
     // ── КАРТОЧКИ ────────────────────────────────────────────────────────
     +'<div class="cards">'
-    +card('ВСИП',V.incNds-V.expNds)
-    +card('ТИМ-ТРЕЙД',T.incNds-T.expNds)
-    +card('ГРУППА',(V.incNds+T.incNds)-(V.expNds+T.expNds))
+    +card('ВСИП',V.incNds-(VtrNetNds+V.expNds))
+    +card('ТИМ-ТРЕЙД',(T.incNds+TtrNetNds)-T.expNds)
+    +card('ГРУППА',(V.incNds-(VtrNetNds+V.expNds))+((T.incNds+TtrNetNds)-T.expNds))
     +'</div>';
 }
 
