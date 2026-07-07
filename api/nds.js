@@ -549,10 +549,7 @@ function buildDataTable(r,title){
   if(r.refund)rows.push(ROW('Возвраты',r.refund,refVat,true));
   rows.push(SEP('Итого поступлений',r.tot,r.vVatTotalIn+r.tVatTotalIn));
   rows.push(SECR('Расходы по проектам'));
-  rows.push(ROW('Банковские гарантии',pjBg,pjBgVat,true));
-  rows.push(ROW('Проектирование и изыскание',pjDesign,pjDesignVat,true));
-  rows.push(ROW('Материалы',pjMat,pjMatVat,true));
-  rows.push(ROW('СМР',pjSmr,pjSmrVat,true));
+  if(r.pjOut)rows.push(ROW('Расходы по проектам',r.pjOut||0,projVat||0,false));
   rows.push(SEP('Итого проекты',r.pjOut||0,projVat||0));
   rows.push(SECR('Офисные расходы'));
   if(r.zp)rows.push(ROW('Зарплата',r.zp,r.vVatZp+r.tVatZp,true));
@@ -678,16 +675,12 @@ function render(r,live){
   vst.push(VSPITOG("Итоговый Баланс","itog-v","itog-t","itog-g"));
   vst.push(VSPROWID("  К уплате","itog-pay-v","itog-pay-t","itog-pay-g"));
   vst.push(VSPROWID("  К возмещению","itog-ref-v","itog-ref-t","itog-ref-g"));
-  if(r.currMon){
-    var _now=new Date(),_tYM=_now.getFullYear()*100+(_now.getMonth()+1);
-    var _cYM=parseInt(r.currMon.slice(0,4))*100+parseInt(r.currMon.slice(5,7));
-    if(_cYM>_tYM){
-      vst.push(VSPB());
-      vst.push(VSPH2(r.currMonLabel||"Плановый месяц"));
-      vst.push(VSPR2("К уплате (поступления)",(r.mVatIn||0),(r.pVatIn||0),false,""));
-      vst.push(VSPR2("К возмещению (расходы)",(r.mVatOut||0),(r.pVatOut||0),false,""));
-      vst.push(VSPR2("Баланс",(r.mVatIn||0)-(r.mVatOut||0),(r.pVatIn||0)-(r.pVatOut||0),true,""));
-    }
+  if(r.pVatIn||r.pVatOut||r.planInc||r.planOut){
+    vst.push(VSPB());
+    vst.push(VSPH2("План (буд. мес. квартала)"));
+    vst.push(VSPR2("НДС поступления",0,(r.pVatIn||0),false,""));
+    vst.push(VSPR2("НДС расходы",0,(r.pVatOut||0),false,""));
+    vst.push(VSPR2("Баланс",0,(r.pVatIn||0)-(r.pVatOut||0),true,""));
   }
 
   var st=live?'<span style="color:#16a34a">● live · '+r.cnt+' тр.</span>':'<span style="color:#9ca3af">данные на '+r.d1+'</span>';
@@ -769,11 +762,16 @@ function load(reset){
       if(p.category_id===3147)mVatIn+=_ddsNum(p.income)||0;
       if(p.category_id===3144)mVatOut+=_ddsNum(p.outcome)||0;
     });
-    // Плановый НДС из plan_money (только будущие месяцы)
+    // Плановые данные из plan_money — только для будущих месяцев квартала
     var planMs=res[3]||[];
     var planInc=0,planOut=0,pVatIn=0,pVatOut=0;
+    var _pNow=new Date(),_pNowYM=_pNow.getFullYear()*100+(_pNow.getMonth()+1);
     planMs.forEach(function(pm){
-      if(!pm.pls_date||pm.pls_date.slice(0,7)!==currMon)return;
+      if(!pm.pls_date)return;
+      var pmYM=parseInt(pm.pls_date.slice(0,4))*100+parseInt(pm.pls_date.slice(5,7));
+      if(pmYM<=_pNowYM)return; // только строго будущие месяцы
+      var pmM=pm.pls_date.slice(0,7);
+      if(pmM<rng.s0.slice(0,7)||pmM>rng.s1.slice(0,7))return; // в пределах квартала
       if(pm.org_id!==3&&pm.org_account_id!==36)return;
       if(pm.type===30){planInc+=pm.total||0;pVatIn+=pm.vat_total||0;}
       if(pm.type===40){planOut+=pm.total||0;pVatOut+=pm.vat_total||0;}
