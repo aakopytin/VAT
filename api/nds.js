@@ -629,6 +629,7 @@ function buildDataTable(r,title){
 function render(r,live){
   var rows=[];
   var planPjInc=r.planPjInc||{},planPjExpV=r.planPjExpV||{},planPjExpT=r.planPjExpT||{},planOffV=r.planOffV||{};
+  var effIn=r.effIn||0,effOut=r.effOut||0;
   rows.push(HDR());
   rows.push(TR6("Остаток "+r.d0+" · ВСИП",r.vSt,r.vSt,null,null,null,"",""));
   rows.push(TR6("Остаток "+r.d0+" · ТТ",r.tSt,null,null,r.tSt,null,r.tSt<0?"r":"",""));
@@ -643,16 +644,21 @@ function render(r,live){
   if(hasPi){
     PO.forEach(function(p){
       var pv=r.piP_v[p]||0,pt=r.piP_t[p]||0,pp=planPjInc[p]||0;
-      if(pv||pt||pp)rows.push(TR6(PN[p],pv+pt,pv+pp,pv>0||pp>0?r.vVatPiP[p]||0:null,pt,pt>0?r.tVatPiP[p]||0:null,"g",1,pp));
+      var ppVat=pp?Math.round(pp*effIn):0;
+      var actNv=pv>0?r.vVatPiP[p]||0:null;
+      var nv=ppVat?(actNv||0)+ppVat:actNv;
+      if(pv||pt||pp)rows.push(TR6(PN[p],pv+pt,pv+pp,nv,pt,pt>0?r.tVatPiP[p]||0:null,"g",1,pp));
     });
   }else if(r.pjIn||planIncTot){
-    rows.push(TR6("Поступления по проектам",r.pjIn,r.vPjIn+planIncTot,null,r.tPjIn,null,"g",1,planIncTot));
+    var ppVatTot=planIncTot?Math.round(planIncTot*effIn):0;
+    rows.push(TR6("Поступления по проектам",r.pjIn,r.vPjIn+planIncTot,ppVatTot?(r.vVatPjIn||0)+ppVatTot||null:null,r.tPjIn,null,"g",1,planIncTot));
   }
   if(r.pr)rows.push(TR6("Процентные доходы",r.pr,r.vPr,null,r.tPr,null,"g",1));
   if(r.refund)rows.push(TR6("Возвраты",r.refund,r.vRefund,r.vVatRefV||null,r.tRefund,r.tVatRefV||null,"g",1));
   if(r.poIn)rows.push(TR6("Прочие поступления",r.poIn,r.vPoIn,null,r.tPoIn,null,"g",1));
   var incV=r.vPjIn+r.vPr+r.vRefund+r.vPoIn,incT=r.tPjIn+r.tPr+r.tRefund+r.tPoIn;
-  rows.push(SEP6("Итого поступлений",r.tot,incV+planIncTot,r.vVatTotalIn,incT,r.tVatTotalIn,"g",planIncTot));
+  var planIncVat=planIncTot?Math.round(planIncTot*effIn):0;
+  rows.push(SEP6("Итого поступлений",r.tot,incV+planIncTot,(r.vVatTotalIn||0)+planIncVat,incT,r.tVatTotalIn,"g",planIncTot));
 
   rows.push(SEC("Расходы по проектам"));
   var hasPo=Object.keys(r.poP_v).length>0||Object.keys(r.poP_t).length>0;
@@ -662,10 +668,13 @@ function render(r,live){
     PO.forEach(function(p){
       var pv=r.poP_v[p]||0,pt=r.poP_t[p]||0;
       var ppV=planPjExpV[p]||0,ppT=planPjExpT[p]||0,pp=ppV+ppT;
-      if(pv||pt||pp)rows.push(TR6(PN[p],pv+pt,pv+ppV,r.vVatPoP[p]||0,pt+ppT,r.tVatPoP[p]||0,"",1,pp));
+      var ppVatV=ppV?Math.round(ppV*effOut):0;
+      var nv=(r.vVatPoP[p]||0)+ppVatV||null;
+      if(pv||pt||pp)rows.push(TR6(PN[p],pv+pt,pv+ppV,nv,pt+ppT,r.tVatPoP[p]||0,"",1,pp));
     });
   }
-  rows.push(SEP6("Итого проекты",r.pjOut,r.vPjOut+pjExpVTot,r.vVatTotalOut-r.vVatOffV||null,r.tPjOut+pjExpTTot,r.tVatTotalOut-r.tVatOffV||null,"",pjExpVTot+pjExpTTot));
+  var pjExpVVat=pjExpVTot?Math.round(pjExpVTot*effOut):0;
+  rows.push(SEP6("Итого проекты",r.pjOut,r.vPjOut+pjExpVTot,(r.vVatTotalOut||0)-(r.vVatOffV||0)+pjExpVVat||null,r.tPjOut+pjExpTTot,(r.tVatTotalOut||0)-(r.tVatOffV||0)||null,"",pjExpVTot+pjExpTTot));
 
   rows.push(SEC("Офисные расходы"));
   var pOff=planOffV;
@@ -689,13 +698,17 @@ function render(r,live){
   rows.push(SEP6("Итого офисные",offSum,offV+offPlanTot,r.vVatOffV||null,offT,r.tVatOffV||null,"",offPlanTot));
 
   rows.push(SEC("Переводы между счетами"));
-  if(r.trIn_v||r.trIn_t){
-    rows.push(TR6("Получено",r.trIn_v+r.trIn_t,r.trIn_v,r.vVatTrInD||null,r.trIn_t,r.tVatTrInD||null,"g",1));
+  var pp_trIn=r.planTrIn||0,pp_trOut=r.planTrOut||0;
+  var ppVat_trIn=r.planTrVatIn||0,ppVat_trOut=r.planTrVatOut||0;
+  if(r.trIn_v||r.trIn_t||pp_trIn){
+    rows.push(TR6("Получено",(r.trIn_v||0)+(r.trIn_t||0),(r.trIn_v||0)+pp_trIn,(r.vVatTrInD||0)+ppVat_trIn||null,r.trIn_t||0,r.tVatTrInD||null,"g",1,pp_trIn));
   }
-  if(r.trOut_v||r.trOut_t){
-    rows.push(TR6("Списано",r.trOut_v+r.trOut_t,r.trOut_v,r.vVatTrOutD||null,r.trOut_t,r.tVatTrOutD||null,"",1));
+  if(r.trOut_v||r.trOut_t||pp_trOut){
+    rows.push(TR6("Списано",(r.trOut_v||0)+(r.trOut_t||0),(r.trOut_v||0)+pp_trOut,(r.vVatTrOutD||0)+ppVat_trOut||null,r.trOut_t||0,r.tVatTrOutD||null,"",1,pp_trOut));
   }
-  rows.push(SEP6("Нетто переводы",r.trNetto,(r.trIn_v-r.trOut_v),(r.vVatTrInD-r.vVatTrOutD)||null,(r.trIn_t-r.trOut_t),(r.tVatTrInD-r.tVatTrOutD)||null,r.trNetto>0?"g":r.trNetto<0?"r":""));
+  var planTrNetto=pp_trIn-pp_trOut,planTrVatNetto=ppVat_trIn-ppVat_trOut;
+  var totNetto=(r.trNetto||0)+planTrNetto;
+  rows.push(SEP6("Нетто переводы",r.trNetto,(r.trIn_v||0)-(r.trOut_v||0)+planTrNetto,((r.vVatTrInD||0)-(r.vVatTrOutD||0))+planTrVatNetto||null,(r.trIn_t||0)-(r.trOut_t||0),(r.tVatTrInD||0)-(r.tVatTrOutD||0)||null,totNetto>0?"g":totNetto<0?"r":"",planTrNetto));
 
   if(r.skIn||r.skOut){
     rows.push(SEC("Финансирование (займы)"));
@@ -825,8 +838,9 @@ function load(reset){
     var catMap={};cats.forEach(function(cat){catMap[cat.id]=AC[cat.name]||"other";});
     var MATNAMES=/матери/i;
     var OFFCODES={zp:1,km:1,ins:1,bk:1,lz:1,ar:1,buh:1,ntax:1,pct:1,bg:1,po:1,svc:1};
+    var TRCAT={1004:1,1007:1};
     var planPjInc={},planPjExpV={},planPjExpT={},planOffV={};
-    var planInc=0,planOut=0;
+    var planInc=0,planOut=0,planTrIn=0,planTrOut=0;
     var _pNow=new Date(),_pNowYM=_pNow.getFullYear()*100+(_pNow.getMonth()+1);
     planMs.forEach(function(pm){
       if(!pm.pls_date)return;
@@ -839,7 +853,9 @@ function load(reset){
       var amt=pm.total||0;
       var catCode=catMap[pm.category_id]||"other";
       var isMat=MATNAMES.test(pm.name||"");
-      if(pm.type===30){
+      if(TRCAT[pm.category_id]){
+        if(pm.type===30){planTrIn+=amt;}else{planTrOut+=amt;}
+      } else if(pm.type===30){
         planPjInc[pid]=(planPjInc[pid]||0)+amt;planInc+=amt;
       } else if(pm.type===40){
         planOut+=amt;
@@ -870,6 +886,10 @@ function load(reset){
       r.pVatIn=0;r.pVatOut=0;r.pVatBal=0;
       r.planInc=planInc;r.planOut=planOut;
       r.planPjInc=planPjInc;r.planPjExpV=planPjExpV;r.planPjExpT=planPjExpT;r.planOffV=planOffV;
+      r.planTrIn=planTrIn;r.planTrOut=planTrOut;
+      r.planTrVatIn=Math.round(planTrIn*22/122);r.planTrVatOut=Math.round(planTrOut*22/122);
+      r.effIn=rPrev&&rPrev.tot>0?(rPrev.vVatTotalIn+rPrev.tVatTotalIn)/rPrev.tot:0;
+      r.effOut=rPrev&&rPrev.pjOut>0?((rPrev.vVatTotalOut-rPrev.vVatOffV)+(rPrev.tVatTotalOut-rPrev.tVatOffV))/rPrev.pjOut:0;
       r.currMon=currMon;r.currMonLabel=MONTHS_RU[parseInt(currMon.slice(5,7))]+' '+currMon.slice(0,4);
       r.prevR=rPrev;
       r.estPlanVatIn=estPlanVatIn;r.estPlanVatOut=estPlanVatOut;
