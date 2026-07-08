@@ -483,6 +483,17 @@ function VSPR2(l,fact,plan,bold,cls){
   var dv=delta?fmt(delta):"—";
   return"<tr><td style='"+sl+"'>"+l+"</td><td style='"+sr+"'>"+fmt(fact||0)+"</td><td style='"+sr+"'>"+fmt(plan||0)+"</td><td style='"+sd+dc+"'>"+dv+"</td></tr>";
 }
+function VSPRFC(l,v,t,totFC,bold,cls){
+  var brd=bold?";border-top:1px solid #d1d5db":"";
+  var fw=bold?";font-weight:700":"";
+  var sl="padding:1px 2px;font-size:14px;color:#1f2937"+fw+brd;
+  var sr="padding:1px 2px;text-align:right;font-size:14px;white-space:nowrap;color:#1f2937"+fw+brd;
+  var cn="";
+  if(bold&&cls==="r")cn=";color:#dc2626";
+  else if(bold&&cls==="g")cn=";color:#16a34a";
+  else if(!bold){cn=cls==="r"&&(totFC||0)>0?";color:#dc2626":cls==="g"&&(totFC||0)<0?";color:#16a34a":"";}
+  return"<tr><td style='"+sl+cn+"'>"+l+"</td><td style='"+sr+cn+"'>"+fmt(v||0)+"</td><td style='"+sr+cn+"'>"+fmt(t||0)+"</td><td style='"+sr+cn+"'>"+fmt(totFC||0)+"</td></tr>";
+}
 function VSPKUP(l,v,t){
   var tot=(v||0)+(t||0);
   var sl="padding:1px 2px;font-size:12px;color:#6b7280";
@@ -703,20 +714,23 @@ function render(r,live){
   var vatTotOut_t=r.tVatTotalOut+tVatTrNet;
   var vatBalV=r.vVatTotalIn-vatTotOut_v;
   var vatBalT=r.tVatTotalIn-vatTotOut_t;
+  var planVatIn=r.pVatIn||r.estPlanVatIn||0;
+  var planVatOut=r.pVatOut||r.estPlanVatOut||0;
   var vst=[];
   vst.push(VSPH());
   vst.push(VSPR("НДС проекты",(r.vVatIncPjIn||0),(r.tVatIncPjIn||0),false,""));
   vst.push(VSPR("НДС прочие поступления",r.vVatTotalIn-(r.vVatIncPjIn||0),r.tVatTotalIn-(r.tVatIncPjIn||0),false,""));
-  vst.push(VSPR("К уплате",r.vVatTotalIn,r.tVatTotalIn,true,"r"));
+  vst.push(VSPRFC("К уплате",r.vVatTotalIn,r.tVatTotalIn,r.vVatTotalIn+r.tVatTotalIn+planVatIn,true,"r"));
   vst.push(VSPB());
   vst.push(VSPR("НДС проекты",r.vVatTotalOut-r.vVatOffV,r.tVatTotalOut-r.tVatOffV,false,""));
   vst.push(VSPR("НДС офисные",r.vVatOffV,r.tVatOffV,false,""));
   vst.push(VSPR("НДС трансф.",vVatTrNet,tVatTrNet,false,""));
-  vst.push(VSPR("К возмещению",vatTotOut_v,vatTotOut_t,true,"g"));
+  vst.push(VSPRFC("К возмещению",vatTotOut_v,vatTotOut_t,vatTotOut_v+vatTotOut_t+planVatOut,true,"g"));
   vst.push(VSPB());
-  var bCls=vatBalV>0?"r":vatBalV<0?"g":"";
+  var vatFcTot=vatBalV+vatBalT+planVatIn-planVatOut;
+  var bCls=vatFcTot>0?"r":vatFcTot<0?"g":"";
   lastVatBalV=vatBalV;lastVatBalT=vatBalT;
-  vst.push(VSPR("Баланс",vatBalV,vatBalT,true,bCls));
+  vst.push(VSPRFC("Баланс",vatBalV,vatBalT,vatFcTot,true,bCls));
   vst.push(VSPKUP("  К уплате",vatBalV,vatBalT));
   vst.push(VSPKREF("  К возмещению",vatBalV,vatBalT));
   vst.push(VSPB());
@@ -725,9 +739,7 @@ function render(r,live){
   vst.push(VSPITOG("Итоговый Баланс","itog-v","itog-t","itog-g"));
   vst.push(VSPROWID("  К уплате","itog-pay-v","itog-pay-t","itog-pay-g"));
   vst.push(VSPROWID("  К возмещению","itog-ref-v","itog-ref-t","itog-ref-g"));
-  if(r.planInc||r.planOut||r.estPlanVatIn||r.estPlanVatOut){
-    var planVatIn=r.pVatIn||r.estPlanVatIn||0;
-    var planVatOut=r.pVatOut||r.estPlanVatOut||0;
+  if(planVatIn||planVatOut){
     vst.push(VSPB());
     vst.push(VSPH2("Прогноз (буд. мес. квартала)"));
     vst.push(VSPR2("НДС поступления",0,planVatIn,false,""));
