@@ -865,11 +865,9 @@ function load(reset){
       var code=AC[cat.name]||"other";
       catMap[cat.id]=code;
       var sub=code;
-      if(code==="pjOut"){
-        if(/^Материалы/i.test(cat.name))sub="mat";
-        else if(/^СМР/i.test(cat.name))sub="smr";
-        else if(cat.name==="Проектирование-Изыскание")sub="design";
-      }
+      if(/^Материалы/i.test(cat.name))sub="mat";
+      else if(/^СМР/i.test(cat.name))sub="smr";
+      else if(cat.name==="Проектирование-Изыскание")sub="design";
       catSubMap[cat.id]=sub;
     });
     var OFFCODES={zp:1,km:1,ins:1,bk:1,lz:1,ar:1,buh:1,ntax:1,pct:1,po:1};
