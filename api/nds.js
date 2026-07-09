@@ -735,26 +735,36 @@ function render(r,live){
   rows.push(SEP6("ВСЕГО РАСХОДОВ",r.te+r.skOut-r.trNetto,null,r.vVatTotalOut||null,null,r.tVatTotalOut||null,"",r.planOut||0));
   rows.push(SEP6(r.cOk?"Контрольная сумма":"Контрольная сумма ⚠",r.ctrl,r.vCtrl,null,r.tCtrl,null,r.cOk?"g":"r"));
 
-  // ─── Свод НДС (справа) ──────────────────────────────────────────────────
-  // К уплате  = vVatTotalIn (3147 project income)
-  // К возмещению = vVatTotalOut (3144 project+office; vVatOffV уже внутри)
-  //              + vVatTrNet (нетто НДС по трансферам: уплачено − получено)
-  // БАЛАНС = К уплате − К возмещению (>0 красный = к уплате; <0 зелёный = возмещение)
-  var vVatTrNet=r.vVatTrOut-r.vVatTrIn;   // >0 = нетто отток ВСИП
+  // ─── Свод НДС (справа) — факт + план ───────────────────────────────────
+  // planIncVat, pjVatV, pjVatT, offPlanVat, ppVat_trOut — вычислены выше в render()
+  var vVatTrNet=r.vVatTrOut-r.vVatTrIn;   // >0 = нетто отток ВСИП (факт)
   var tVatTrNet=r.tVatTrOut-r.tVatTrIn;
-  var vatTotOut_v=r.vVatTotalOut+vVatTrNet;
-  var vatTotOut_t=r.tVatTotalOut+tVatTrNet;
-  var vatBalV=r.vVatTotalIn-vatTotOut_v;
-  var vatBalT=r.tVatTotalIn-vatTotOut_t;
+  // К уплате: факт + план поступлений (план весь на ВСИП, ТТ без VAT плана)
+  var vatIn_v=r.vVatTotalIn+planIncVat;
+  var vatIn_t=r.tVatTotalIn;
+  // К возмещению — расходы по проектам
+  var vatPjOut_v=(r.vVatTotalOut-r.vVatOffV)+pjVatV;
+  var vatPjOut_t=(r.tVatTotalOut-r.tVatOffV)+pjVatT;
+  // К возмещению — офисные (план только ВСИП)
+  var vatOff_v=r.vVatOffV+offPlanVat;
+  var vatOff_t=r.tVatOffV;
+  // К возмещению — трансферы: план списания ВСИП увеличивает вычет ВСИП
+  var vatTrNet_v=vVatTrNet+ppVat_trOut;
+  var vatTrNet_t=tVatTrNet;
+  // Итоги
+  var vatTotOut_v=vatPjOut_v+vatOff_v+vatTrNet_v;
+  var vatTotOut_t=vatPjOut_t+vatOff_t+vatTrNet_t;
+  var vatBalV=vatIn_v-vatTotOut_v;
+  var vatBalT=vatIn_t-vatTotOut_t;
   var vst=[];
   vst.push(VSPH());
-  vst.push(VSPR("НДС проекты",(r.vVatIncPjIn||0),(r.tVatIncPjIn||0),false,""));
+  vst.push(VSPR("НДС проекты",(r.vVatIncPjIn||0)+planIncVat,(r.tVatIncPjIn||0),false,""));
   vst.push(VSPR("НДС прочие поступления",r.vVatTotalIn-(r.vVatIncPjIn||0),r.tVatTotalIn-(r.tVatIncPjIn||0),false,""));
-  vst.push(VSPR("К уплате",r.vVatTotalIn,r.tVatTotalIn,true,"r"));
+  vst.push(VSPR("К уплате",vatIn_v,vatIn_t,true,"r"));
   vst.push(VSPB());
-  vst.push(VSPR("НДС проекты",r.vVatTotalOut-r.vVatOffV,r.tVatTotalOut-r.tVatOffV,false,""));
-  vst.push(VSPR("НДС офисные",r.vVatOffV,r.tVatOffV,false,""));
-  vst.push(VSPR("НДС трансф.",vVatTrNet,tVatTrNet,false,""));
+  vst.push(VSPR("НДС проекты",vatPjOut_v,vatPjOut_t,false,""));
+  vst.push(VSPR("НДС офисные",vatOff_v,vatOff_t,false,""));
+  vst.push(VSPR("НДС трансф.",vatTrNet_v,vatTrNet_t,false,""));
   vst.push(VSPR("К возмещению",vatTotOut_v,vatTotOut_t,true,"g"));
   vst.push(VSPB());
   var bCls=vatBalV>0?"r":vatBalV<0?"g":"";
