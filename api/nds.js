@@ -746,8 +746,8 @@ function render(r,live){
 
   // ─── Свод НДС (справа) — факт + план ───────────────────────────────────
   // planIncVat, pjVatV, pjVatT, offPlanVat, ppVat_trOut — вычислены выше в render()
-  var vVatTrNet=r.vVatTrOut-r.vVatTrIn;   // >0 = нетто отток ВСИП (факт)
-  var tVatTrNet=r.tVatTrOut-r.tVatTrIn;
+  var vVatTrNet=r.vVatTrOutD-r.vVatTrInD;  // >0 = нетто отток ВСИП (зеркальные значения)
+  var tVatTrNet=r.tVatTrInD-r.tVatTrOutD;  // >0 = нетто приток ТТ от ВСИП (возвраты без НДС)
   // К уплате: факт + план поступлений (план весь на ВСИП, ТТ без VAT плана)
   var vatIn_v=r.vVatTotalIn+planIncVat;
   var vatIn_t=r.tVatTotalIn;
