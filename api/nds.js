@@ -6,7 +6,7 @@ req.on('end', function() { resolve(d); });
 req.on('error',function() { resolve(''); });
 });
 }
- 
+
 function parseForm(body) {
 var r = {};
 if (!body) return r;
@@ -18,12 +18,12 @@ decodeURIComponent(pair.slice(i+1).replace(/\+/g,' '));
 });
 return r;
 }
- 
+
 async function handler(req, res) {
 res.setHeader('X-Frame-Options', 'ALLOWALL');
 res.setHeader('Content-Security-Policy', "frame-ancestors *");
 res.setHeader('Content-Type', 'text/html; charset=utf-8');
- 
+
 if (req.method === 'POST') {
 var raw = await readBody(req);
 var fields = parseForm(raw);
@@ -34,17 +34,17 @@ var vercelHost = req.headers['host'] || '';
 console.log('[DDS] POST | domain:', domain, '| account:', accountId, '| hasToken:', !!accessToken, '| host:', vercelHost);
 return res.status(200).send(html(domain, accountId, accessToken, vercelHost));
 }
- 
+
 return res.status(200).send('<html><body style="font-family:sans-serif;padding:20px"><h3>&#x2713; ДДС виджет работает</h3></body></html>');
 }
- 
+
 handler.config = { api: { bodyParser: false } };
 module.exports = handler;
- 
+
 function esc(s) {
 return String(s||'').replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$');
 }
- 
+
 function html(domain, accountId, accessToken, vercelHost) {
 var d=domain,a=accountId,t=accessToken,h=vercelHost;
 return `<!DOCTYPE html>
@@ -73,7 +73,7 @@ var DOMAIN="${esc(d)}";
 var ACCOUNT_ID="${esc(a)}";
 var TOKEN="${esc(t)}";
 var API_BASE="${esc(h)}"?"https://${esc(h)}":(location.origin||"");
- 
+
 var VSIP={2:1,4:1,5:1,6:1,7:1,8:1};
 var TT={18:1,26:1};
 var OFF={24:1};
@@ -98,7 +98,7 @@ var AC={
 "Проектирование-Изыскание":"pjOut","Составление исполнительной документации":"svc",
 "Услуги по сертификации":"svc","Тесты и испытания":"svc","Банковские гарантии":"bg"
 };
- 
+
 function fmt(v){if(v===null||v===undefined||v===0)return"—";return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:0,maximumFractionDigits:0}).format(Math.round(v));}
 function fmtI(v){return new Intl.NumberFormat("ru-RU",{minimumFractionDigits:0,maximumFractionDigits:0}).format(v||0);}
 function _ddsNum(s){if(!s&&s!==0)return 0;return parseFloat(String(s).replace(/[^0-9.-]/g,""))||0;}
@@ -113,7 +113,7 @@ function getRange(){
   var d1=s1.slice(8)+"."+s1.slice(5,7)+"."+s1.slice(0,4);
   return{s0:s0,s1:s1,d0:d0,d1:d1,label:"К"+q+" "+y,ymd:s0.slice(0,7)};
 }
- 
+
 function getCurrMonth(rng){
   var now=new Date();
   var nowYM=now.getFullYear()*100+(now.getMonth()+1);
@@ -129,11 +129,11 @@ function monthEnd(ym){
   return ym+"-"+String(new Date(y,m,0).getDate()).padStart(2,"0");
 }
 var MONTHS_RU=["","Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
- 
+
 var lk=function(ym){return"dds_"+ACCOUNT_ID+"_"+ym;};
 function clrF(ym){try{localStorage.removeItem(lk(ym));}catch(e){}}
 var adjPrev={v:0,t:0},adjCurr={v:0,t:0},lastVatBalV=0,lastVatBalT=0,lastPlanBal=0;
- 
+
 function loadAll(entity,extra){
   var all=[],page=1;
   function next(){
@@ -153,11 +153,11 @@ function loadAll(entity,extra){
   }
   return next();
 }
- 
+
 function calc(txMonth,txAll,cats,plsData,rng){
   var cMap={};
   cats.forEach(function(c){cMap[c.id]=c.name||"";});
- 
+
   var vSt=0,tSt=0,vEnd=0,tEnd=0;
   txAll.forEach(function(tx){
     if(!tx.date)return;
@@ -166,7 +166,7 @@ function calc(txMonth,txAll,cats,plsData,rng){
     if(tx.date<rng.s0){if(VSIP[aid])vSt+=inc-out;if(TT[aid])tSt+=inc-out;}
     if(tx.date<=rng.s1){if(VSIP[aid])vEnd+=inc-out;if(TT[aid])tEnd+=inc-out;}
   });
- 
+
   var vPr=0,tPr=0,vPjIn=0,tPjIn=0,piP_v={},piP_t={};
   var vRefund=0,tRefund=0,vPoIn=0,tPoIn=0;
   var refPG_v={},refPG_t={};
@@ -178,7 +178,7 @@ function calc(txMonth,txAll,cats,plsData,rng){
   var trIn_v=0,trOut_v=0,trIn_t=0,trOut_t=0;
   var vSkIn=0,tSkIn=0,vSkOut=0,tSkOut=0;
   var poDet=[];
- 
+
   // Pre-pass: determine which transfer reference_ids are internal (both legs same org)
   var trRef={};
   txMonth.forEach(function(tx){
@@ -191,7 +191,7 @@ function calc(txMonth,txAll,cats,plsData,rng){
     if(isV){trRef[ref].vIn+=inc;trRef[ref].vOut+=out;}
     if(isT){trRef[ref].tIn+=inc;trRef[ref].tOut+=out;}
   });
- 
+
   txMonth.forEach(function(tx){
     var aid=tx.org_account_id,cn=cMap[tx.category_id]||"";
     var pid=tx.project_id||0;
@@ -201,7 +201,7 @@ function calc(txMonth,txAll,cats,plsData,rng){
     var rp=pid,gp=(rp&&PG[rp])?PG[rp]:rp;
     var pOk=gp&&!!PN[gp],pOff=rp&&!!OFF[rp];
     var cat=AC[cn];
- 
+
     if(cat==="tr"){
       var ref=tx.reference_id,rf=ref?trRef[ref]:null;
       // skip internal transfers: both legs of same org present in period
@@ -250,12 +250,12 @@ function calc(txMonth,txAll,cats,plsData,rng){
       else{if(isV){vPjOut+=out;if(gp&&pOk)poP_v[gp]=(poP_v[gp]||0)+out;}if(isT){tPjOut+=out;if(gp&&pOk)poP_t[gp]=(poP_t[gp]||0)+out;}}
     }
   });
- 
+
   // ─── НДС из transaction_pls ──────────────────────────────────────────────
   // 3147 income → доходные строки per-project (piP) или Возвраты (refPG)
   // 3144 outcome → расходные строки per-project (poP) или офисные (vVatOffV)
   // !pOk + pid=27 → vVatTr; !pOk + прочие → vVatOffV (3144) / vVatTr (3147)
- 
+
   // ref_id → AC-категория расходной транзакции (для разбивки офисного НДС по строкам)
   var refCat_v={},refCat_t={};
   txMonth.forEach(function(tx){
@@ -280,7 +280,7 @@ function calc(txMonth,txAll,cats,plsData,rng){
       }
     }
   });
- 
+
   var vVatPiP={},tVatPiP={},vVatPoP={},tVatPoP={};
   var vVatTr=0,tVatTr=0,vVatTrIn=0,tVatTrIn=0,vVatTrOut=0,tVatTrOut=0;
   var vVatRefV=0,tVatRefV=0;
@@ -291,7 +291,7 @@ function calc(txMonth,txAll,cats,plsData,rng){
   var vVatBuh=0,tVatBuh=0,vVatNtax=0,tVatNtax=0,vVatPo=0,tVatPo=0;
   var vVatPct=0,tVatPct=0,vVatBg=0,tVatBg=0,vVatPjOutOff=0,tVatPjOutOff=0;
   var vVatPjBg=0,tVatPjBg=0,vVatPjDesign=0,tVatPjDesign=0,vVatPjMat=0,tVatPjMat=0,vVatPjSmr=0,tVatPjSmr=0;
- 
+
   (plsData||[]).forEach(function(p){
     if(!p.date||p.date<rng.s0||p.date>rng.s1)return;
     var is3144=p.category_id===3144,is3147=p.category_id===3147;
@@ -362,7 +362,7 @@ function calc(txMonth,txAll,cats,plsData,rng){
       }
     }
   });
- 
+
   // Привязка НДС поступлений к категориям ДДС через reference_id
   var vVatIncPr=0,tVatIncPr=0,vVatIncRef=0,tVatIncRef=0,vVatIncPoIn=0,tVatIncPoIn=0;
   (plsData||[]).forEach(function(p2){
@@ -377,11 +377,11 @@ function calc(txMonth,txAll,cats,plsData,rng){
       if(ic2==="pr")tVatIncPr+=inc2;else if(ic2==="refund")tVatIncRef+=inc2;else if(ic2==="pjIn"){}else tVatIncPoIn+=inc2;
     }
   });
- 
+
   // Зеркалирование НДС трансферов: Аспро пишет только одну сторону ВСИП↔ТТ
   var tVatTrInD=tVatTrIn||vVatTrOut, tVatTrOutD=tVatTrOut||vVatTrIn;
   var vVatTrInD=vVatTrIn||tVatTrOut, vVatTrOutD=vVatTrOut||tVatTrIn;
- 
+
   var vVatIncPjIn=Object.keys(vVatPiP).reduce(function(s,k){return s+(vVatPiP[k]||0);},0);
   var tVatIncPjIn=Object.keys(tVatPiP).reduce(function(s,k){return s+(tVatPiP[k]||0);},0);
   var pjIn=vPjIn+tPjIn,pr=vPr+tPr,refund=vRefund+tRefund,poIn=vPoIn+tPoIn;
@@ -399,7 +399,7 @@ function calc(txMonth,txAll,cats,plsData,rng){
   var vCtrl=vSt+(vPjIn+vPr+vRefund+vPoIn+vSkIn+trIn_v)-(vPjOut+vPjOutOff+vZp+vKm+vBk+vIns+vLz+vAr+vBuh+vNtax+vPo+vPct+vBg+vSkOut+trOut_v)-vEnd;
   var tCtrl=tSt+(tPjIn+tPr+tRefund+tPoIn+tSkIn+trIn_t)-(tPjOut+tPjOutOff+tZp+tKm+tBk+tIns+tLz+tAr+tBuh+tNtax+tPo+tPct+tBg+tSkOut+trOut_t)-tEnd;
   var cOk=Math.abs(ctrl)<1;
- 
+
   return{vSt:vSt,tSt:tSt,vEnd:vEnd,tEnd:tEnd,tS:tS,tE:tE,
     vPr:vPr,tPr:tPr,pr:pr,vPjIn:vPjIn,tPjIn:tPjIn,piP_v:piP_v,piP_t:piP_t,pjIn:pjIn,
     vRefund:vRefund,tRefund:tRefund,refund:refund,vPoIn:vPoIn,tPoIn:tPoIn,poIn:poIn,tot:tot,
@@ -426,7 +426,7 @@ function calc(txMonth,txAll,cats,plsData,rng){
     vVatIncPjIn:vVatIncPjIn,tVatIncPjIn:tVatIncPjIn,
     ctrl:ctrl,vCtrl:vCtrl,tCtrl:tCtrl,cOk:cOk,poDet:poDet,cnt:txMonth.length,d0:rng.d0,d1:rng.d1,label:rng.label,ymd:rng.ymd};
 }
- 
+
 function HDR(){
   var sb="width:9px;padding:1px 2px;font-size:11px;font-weight:700;color:#374151;border-bottom:2px solid #9ca3af;text-align:right;white-space:nowrap;overflow:hidden";
   var sn="width:7px;padding:1px 2px;font-size:11px;font-weight:700;color:#9ca3af;border-bottom:2px solid #9ca3af;text-align:right;white-space:nowrap;overflow:hidden";
@@ -452,7 +452,7 @@ function SEP6(l,tot,v,nv,t,nt,cls,plan,planT){
   return"<tr><td style='"+s+"'>"+l+"</td><td style='"+sc+"'>"+fmt(itog)+"</td><td style='"+sr+"'>"+fmt(tot)+"</td>"+pc+"<td style='"+sr+"'>"+fmt(v)+"</td><td style='"+sn+"'>"+fmt(nv)+"</td><td style='"+sr+"'>"+fmt(t)+"</td><td style='"+sn+"'>"+fmt(nt)+"</td></tr>";
 }
 function SEC(l){return"<tr><td colspan='8' style='padding:5px 4px 1px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#6b7280;border-top:1px solid #e5e7eb'>"+l+"</td></tr>";}
- 
+
 // ─── Свод НДС — вспомогательные функции ──────────────────────────────────
 function VSPH(){
   var s="width:55px;padding:1px 2px;font-size:13px;font-weight:700;color:#374151;border-bottom:2px solid #9ca3af;text-align:right;white-space:nowrap";
@@ -548,7 +548,7 @@ function updateAdj(){
   setH('itog-ref-v',fmtG(iv));setH('itog-ref-t',fmtG(it));setH('itog-ref-g',fmtG(ig));
 }
 function attachAdj(){updateAdj();}
- 
+
 function buildDataTable(r,title){
   function eff(nds,sum){
     if(!sum)return'<span style="color:#d1d5db">—</span>';
@@ -626,7 +626,7 @@ function buildDataTable(r,title){
     +'<table style="border-collapse:collapse;width:100%">'+rows.join('')+'</table>'
     +'</div>';
 }
- 
+
 function render(r,live){
   var rows=[];
   var planPjInc=r.planPjInc||{};
@@ -655,7 +655,7 @@ function render(r,live){
   rows.push(TR6("Остаток "+r.d1+" · ВСИП",r.vEnd,r.vEnd,null,null,null,"",""));
   rows.push(TR6("Остаток "+r.d1+" · ТТ",r.tEnd,null,null,r.tEnd,null,r.tEnd<0?"r":"",""));
   rows.push(SEP6("ИТОГО на "+r.d1,r.tE,r.vEnd,null,r.tEnd,null,r.tE>=0?"g":"r"));
- 
+
   rows.push(SEC("Поступления"));
   var hasPi=Object.keys(r.piP_v).length>0||Object.keys(r.piP_t).length>0;
   var planIncTot=r.planInc||0;
@@ -686,7 +686,7 @@ function render(r,live){
   var planIncFinal=planIncTot+adjIncTot;
   var planIncVat=planIncFinal?Math.round(planIncFinal*effIn):0;
   rows.push(SEP6("Итого поступлений",r.tot,incV+planIncFinal,(r.vVatTotalIn||0)+planIncVat,incT,r.tVatTotalIn,"g",planIncFinal));
- 
+
   rows.push(SEC("Расходы по проектам"));
   var hasPo=Object.keys(r.poP_v).length>0||Object.keys(r.poP_t).length>0;
   var planPjVTot=_so(planPjBg)+_so(planPjDesign)+_so(planPjSmr)+_so(planPjOther);
@@ -713,7 +713,7 @@ function render(r,live){
   var pjVatV=Math.round(_so(planPjBg)*effPjBg+_so(planPjDesign)*effPjDesign+_so(planPjSmr)*effPjSmr+_so(planPjOther)*effOut)+(adjPjVTot?Math.round(adjPjVTot*effOut):0);
   var pjVatT=Math.round(_so(planPjMat)*effPjMat)+(adjPjTTot?Math.round(adjPjTTot*effPjMat):0);
   rows.push(SEP6("Итого проекты",r.pjOut,r.vPjOut+planPjVTot+adjPjVTot,(r.vVatTotalOut||0)-(r.vVatOffV||0)+pjVatV||null,r.tPjOut+planPjTTot+adjPjTTot,(r.tVatTotalOut||0)-(r.tVatOffV||0)+pjVatT||null,"",planPjVTot+planPjTTot+adjPjVTot+adjPjTTot));
- 
+
   rows.push(SEC("Офисные расходы"));
   var pOff=Object.assign({},planOffV);
   var pOffT=Object.assign({},planOffT);
@@ -757,7 +757,7 @@ function render(r,live){
   var offPlanVat=Math.round((pOff.zp||0)*effOffZp+(pOff.km||0)*effOffKm+(pOff.ins||0)*effOffIns+(pOff.bk||0)*effOffBk+(pOff.lz||0)*effOffLz+(pOff.ar||0)*effOffAr+(pOff.buh||0)*effOffBuh+(pOff.ntax||0)*effOffNtax+(pOff.pct||0)*effOffPct+(pOff.bg||0)*effOffBg+pp_po*effOffPo);
   var offTPlanVat=Math.round((pOffT.zp||0)*effTOffZp+(pOffT.km||0)*effTOffKm+(pOffT.ins||0)*effTOffIns+(pOffT.bk||0)*effTOffBk+(pOffT.lz||0)*effTOffLz+(pOffT.ar||0)*effTOffAr+(pOffT.buh||0)*effTOffBuh+(pOffT.ntax||0)*effTOffNtax+(pOffT.pct||0)*effTOffPct+(pOffT.bg||0)*effTOffBg+pp_po_t*effTOffPo);
   rows.push(SEP6("Итого офисные",offSum,offV+offPlanTot,(r.vVatOffV||0)+offPlanVat||null,offT+offTPlanTot,(r.tVatOffV||0)+offTPlanVat||null,"",offPlanTot,offTPlanTot));
- 
+
   rows.push(SEC("Переводы между счетами"));
   var pp_trIn=r.planTrIn||0,pp_trOut=r.planTrOut||0;
   var ppVat_trIn=r.planTrVatIn||0,ppVat_trOut=r.planTrVatOut||0;
@@ -770,17 +770,17 @@ function render(r,live){
   var planTrNetto=pp_trIn-pp_trOut,planTrVatNetto=ppVat_trIn-ppVat_trOut;
   var totNetto=(r.trNetto||0)+planTrNetto;
   rows.push(SEP6("Нетто переводы",r.trNetto,(r.trIn_v||0)-(r.trOut_v||0)-pp_trOut,((r.vVatTrInD||0)-(r.vVatTrOutD||0))-ppVat_trOut||null,(r.trIn_t||0)-(r.trOut_t||0)+pp_trIn,(r.tVatTrInD||0)-(r.tVatTrOutD||0)+ppVat_trIn||null,totNetto>0?"g":totNetto<0?"r":"",planTrNetto));
- 
+
   if(r.skIn||r.skOut){
     rows.push(SEC("Финансирование (займы)"));
     if(r.skIn)rows.push(TR6("Получение займов",r.skIn,r.vSkIn,null,r.tSkIn,null,"g",1));
     if(r.skOut)rows.push(TR6("Погашение займов",r.skOut,r.vSkOut,null,r.tSkOut,null,"",1));
     rows.push(SEP6("Нетто займы",r.skIn-r.skOut,r.vSkIn-r.vSkOut,null,r.tSkIn-r.tSkOut,null,r.skIn-r.skOut>0?"g":r.skIn-r.skOut<0?"r":""));
   }
- 
+
   rows.push(SEP6("ВСЕГО РАСХОДОВ",r.te+r.skOut-r.trNetto,null,r.vVatTotalOut||null,null,r.tVatTotalOut||null,"",r.planOut||0));
   rows.push(SEP6(r.cOk?"Контрольная сумма":"Контрольная сумма ⚠",r.ctrl,r.vCtrl,null,r.tCtrl,null,r.cOk?"g":"r"));
- 
+
   // ─── Свод НДС (справа) — факт + план ───────────────────────────────────
   // planIncVat, pjVatV, pjVatT, offPlanVat, ppVat_trOut — вычислены выше в render()
   var vVatTrNet=r.vVatTrOutD-r.vVatTrInD;  // >0 = нетто отток ВСИП (зеркальные значения)
@@ -824,7 +824,7 @@ function render(r,live){
   vst.push(VSPITOG("Итоговый Баланс","itog-v","itog-t","itog-g"));
   vst.push(VSPROWID("  К уплате","itog-pay-v","itog-pay-t","itog-pay-g"));
   vst.push(VSPROWID("  К возмещению","itog-ref-v","itog-ref-t","itog-ref-g"));
- 
+
   var st=live?'<span style="color:#16a34a">● live · '+r.cnt+' тр.</span>':'<span style="color:#9ca3af">данные на '+r.d1+'</span>';
   return'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #e5e7eb;">'
     +'<div><div style="font-size:14px;font-weight:600">ДДС — '+r.label+'</div>'
@@ -843,7 +843,7 @@ function render(r,live){
     +'</div></div>'
     +'<div style="margin-top:5px;font-size:11px;color:#9ca3af">обновлено: '+new Date().toLocaleTimeString("ru-RU")+'</div>';
 }
- 
+
 function renderPoDet(poDet){
   if(!poDet||!poDet.length)return;
   var d=document.createElement("details"),s=document.createElement("summary");
@@ -858,7 +858,7 @@ function renderPoDet(poDet){
   });
   d.appendChild(t);document.getElementById("root").appendChild(d);
 }
- 
+
 function load(reset){
   var el=document.getElementById("root"),rng=getRange();
   if(reset)clrF(rng.ymd);
@@ -1036,7 +1036,7 @@ function load(reset){
     console.error("[DDS]",e);
   });
 }
- 
+
 (function(){
   var now=new Date(),cY=now.getFullYear(),cQ=Math.ceil((now.getMonth()+1)/3);
   var defY=cY,defQ=cQ;
@@ -1052,7 +1052,7 @@ function load(reset){
   }
   qs.addEventListener("change",function(){load(false);});
 })();
- 
+
 load(false);
 setInterval(function(){load(false);},5*60*1000);
 })();
