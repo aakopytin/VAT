@@ -796,7 +796,7 @@ function render(r,live){
   var vatOff_t=(r.tVatOffV||0)+offTPlanVat;
   // К возмещению — трансферы: план списания ВСИП увеличивает вычет ВСИП
   var vatTrNet_v=vVatTrNet+ppVat_trOut;
-  var vatTrNet_t=tVatTrNet;
+  var vatTrNet_t=tVatTrNet+ppVat_trIn;
   // Итоги
   var vatTotOut_v=vatPjOut_v+vatOff_v+vatTrNet_v;
   var vatTotOut_t=vatPjOut_t+vatOff_t+vatTrNet_t;
