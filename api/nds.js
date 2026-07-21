@@ -784,7 +784,7 @@ function render(r,live){
   // ─── Свод НДС (справа) — факт + план ───────────────────────────────────
   // planIncVat, pjVatV, pjVatT, offPlanVat, ppVat_trOut — вычислены выше в render()
   var vVatTrNet=r.vVatTrOutD-r.vVatTrInD;  // >0 = нетто отток ВСИП (зеркальные значения)
-  var tVatTrNet=r.tVatTrInD-r.tVatTrOutD;  // >0 = нетто приток ТТ от ВСИП (возвраты без НДС)
+  var tVatTrNet=r.tVatTrInD-r.tVatTrOutD;  // >0 = нетто приток ТТ от ВСИП → к уплате для ТТ
   // К уплате: факт + план поступлений (план весь на ВСИП, ТТ без VAT плана)
   var vatIn_v=r.vVatTotalIn+planIncVat;
   var vatIn_t=r.tVatTotalIn;
@@ -794,9 +794,9 @@ function render(r,live){
   // К возмещению — офисные (план ВСИП и ТТ)
   var vatOff_v=r.vVatOffV+offPlanVat;
   var vatOff_t=(r.tVatOffV||0)+offTPlanVat;
-  // К возмещению — трансферы: план списания ВСИП увеличивает вычет ВСИП
+  // К возмещению — трансферы: ВСИП +вычет, ТТ −к уплате (ТТ без НДС, входящий НДС = к уплате)
   var vatTrNet_v=vVatTrNet+ppVat_trOut;
-  var vatTrNet_t=tVatTrNet+ppVat_trIn;
+  var vatTrNet_t=-(tVatTrNet+ppVat_trIn);
   // Итоги
   var vatTotOut_v=vatPjOut_v+vatOff_v+vatTrNet_v;
   var vatTotOut_t=vatPjOut_t+vatOff_t+vatTrNet_t;
