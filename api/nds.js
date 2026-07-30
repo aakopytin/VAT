@@ -211,14 +211,14 @@ function calc(txMonth,txAll,cats,plsData,rng){
       if(isT&&!intT){trIn_t+=inc;trOut_t+=out;}
       return;
     }
-    if(inc>0){
+    if(inc){
       if(cat==="pr"){if(isV)vPr+=inc;if(isT)tPr+=inc;}
       else if(cat==="pjIn"&&pOk){if(isV){vPjIn+=inc;piP_v[gp]=(piP_v[gp]||0)+inc;}if(isT){tPjIn+=inc;piP_t[gp]=(piP_t[gp]||0)+inc;}}
       else if(cat==="refund"){if(isV){vRefund+=inc;if(pOk||pOff)refPG_v[gp]=1;}if(isT){tRefund+=inc;if(pOk||pOff)refPG_t[gp]=1;}}
       else if(cat==="skIn"){if(isV)vSkIn+=inc;if(isT)tSkIn+=inc;}
       else{if(isV)vPoIn+=inc;if(isT)tPoIn+=inc;}
     }
-    if(out>0){
+    if(out){
       if(cat==="zp"){if(isV)vZp+=out;if(isT)tZp+=out;}
       else if(cat==="km"){if(isV)vKm+=out;if(isT)tKm+=out;}
       else if(cat==="ins"){if(isV)vIns+=out;if(isT)tIns+=out;}
