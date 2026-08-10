@@ -323,42 +323,42 @@ function calc(txMonth,txAll,cats,plsData,rng){
     }
     if(is3144){
       // НДС платежей: pid=27 всегда→trOut; per-project→poP; прочие→vVatOffV
-      var out44=_ddsNum(p.outcome)||0;if(!out44)return;
+      var net44=(_ddsNum(p.outcome)||0)-(_ddsNum(p.income)||0);if(!net44)return;
       // pid=27 must be checked BEFORE pOk — project 27 may exist in PN
       if(pid===27){
-        if(p.org_id===1){var rf27b=p.reference_id?trRef[p.reference_id]:null;var intV27b=rf27b&&rf27b.vIn>0&&rf27b.vOut>0&&!rf27b.tIn&&!rf27b.tOut;if(!intV27b){vVatTrOut+=out44;vVatTr+=out44;}}
-        else if(p.org_id===2){tVatTrOut+=out44;tVatTr+=out44;}
+        if(p.org_id===1){var rf27b=p.reference_id?trRef[p.reference_id]:null;var intV27b=rf27b&&rf27b.vIn>0&&rf27b.vOut>0&&!rf27b.tIn&&!rf27b.tOut;if(!intV27b){vVatTrOut+=net44;vVatTr+=net44;}}
+        else if(p.org_id===2){tVatTrOut+=net44;tVatTr+=net44;}
         return;
       }
       if(!pOk){
         {
           if(p.org_id===1){
-            vVatOffV+=out44;vVatTotalOut+=out44;
+            vVatOffV+=net44;vVatTotalOut+=net44;
             var oc=refCat_v[p.reference_id]||"po";
-            if(oc==="zp")vVatZp+=out44;else if(oc==="km")vVatKm+=out44;else if(oc==="bk")vVatBk+=out44;
-            else if(oc==="ins")vVatIns+=out44;else if(oc==="lz")vVatLz+=out44;else if(oc==="ar")vVatAr+=out44;
-            else if(oc==="buh")vVatBuh+=out44;else if(oc==="ntax")vVatNtax+=out44;
-            else if(oc==="pct")vVatPct+=out44;else if(oc==="bg")vVatBg+=out44;else if(oc==="pjOut")vVatPjOutOff+=out44;else vVatPo+=out44;
+            if(oc==="zp")vVatZp+=net44;else if(oc==="km")vVatKm+=net44;else if(oc==="bk")vVatBk+=net44;
+            else if(oc==="ins")vVatIns+=net44;else if(oc==="lz")vVatLz+=net44;else if(oc==="ar")vVatAr+=net44;
+            else if(oc==="buh")vVatBuh+=net44;else if(oc==="ntax")vVatNtax+=net44;
+            else if(oc==="pct")vVatPct+=net44;else if(oc==="bg")vVatBg+=net44;else if(oc==="pjOut")vVatPjOutOff+=net44;else vVatPo+=net44;
           }else if(p.org_id===2){
-            tVatOffV+=out44;tVatTotalOut+=out44;
+            tVatOffV+=net44;tVatTotalOut+=net44;
             var oc2=refCat_t[p.reference_id]||"po";
-            if(oc2==="zp")tVatZp+=out44;else if(oc2==="km")tVatKm+=out44;else if(oc2==="bk")tVatBk+=out44;
-            else if(oc2==="ins")tVatIns+=out44;else if(oc2==="lz")tVatLz+=out44;else if(oc2==="ar")tVatAr+=out44;
-            else if(oc2==="buh")tVatBuh+=out44;else if(oc2==="ntax")tVatNtax+=out44;
-            else if(oc2==="pct")tVatPct+=out44;else if(oc2==="bg")tVatBg+=out44;else if(oc2==="pjOut")tVatPjOutOff+=out44;else tVatPo+=out44;
+            if(oc2==="zp")tVatZp+=net44;else if(oc2==="km")tVatKm+=net44;else if(oc2==="bk")tVatBk+=net44;
+            else if(oc2==="ins")tVatIns+=net44;else if(oc2==="lz")tVatLz+=net44;else if(oc2==="ar")tVatAr+=net44;
+            else if(oc2==="buh")tVatBuh+=net44;else if(oc2==="ntax")tVatNtax+=net44;
+            else if(oc2==="pct")tVatPct+=net44;else if(oc2==="bg")tVatBg+=net44;else if(oc2==="pjOut")tVatPjOutOff+=net44;else tVatPo+=net44;
           }
         }
         return;
       }
       if(p.org_id===1){
-        vVatPoP[gp]=(vVatPoP[gp]||0)+out44;vVatTotalOut+=out44;
+        vVatPoP[gp]=(vVatPoP[gp]||0)+net44;vVatTotalOut+=net44;
         var sv=refSubCat_v[p.reference_id]||"other";
-        if(sv==="bg")vVatPjBg+=out44;else if(sv==="design")vVatPjDesign+=out44;else if(sv==="mat")vVatPjMat+=out44;else if(sv==="smr")vVatPjSmr+=out44;
+        if(sv==="bg")vVatPjBg+=net44;else if(sv==="design")vVatPjDesign+=net44;else if(sv==="mat")vVatPjMat+=net44;else if(sv==="smr")vVatPjSmr+=net44;
       }
       else if(p.org_id===2){
-        tVatPoP[gp]=(tVatPoP[gp]||0)+out44;tVatTotalOut+=out44;
+        tVatPoP[gp]=(tVatPoP[gp]||0)+net44;tVatTotalOut+=net44;
         var sv2=refSubCat_t[p.reference_id]||"other";
-        if(sv2==="bg")tVatPjBg+=out44;else if(sv2==="design")tVatPjDesign+=out44;else if(sv2==="mat")tVatPjMat+=out44;else if(sv2==="smr")tVatPjSmr+=out44;
+        if(sv2==="bg")tVatPjBg+=net44;else if(sv2==="design")tVatPjDesign+=net44;else if(sv2==="mat")tVatPjMat+=net44;else if(sv2==="smr")tVatPjSmr+=net44;
       }
     }
   });
@@ -902,7 +902,7 @@ function load(reset){
       if(!p.date||p.date<m0||p.date>m1)return;
       if(p.org_id!==1&&p.org_id!==2)return;
       if(p.category_id===3147)mVatIn+=_ddsNum(p.income)||0;
-      if(p.category_id===3144)mVatOut+=_ddsNum(p.outcome)||0;
+      if(p.category_id===3144)mVatOut+=(_ddsNum(p.outcome)||0)-(_ddsNum(p.income)||0);
     });
     // Плановые данные из plan_money — только для будущих месяцев квартала
     var planMs=res[3]||[];
