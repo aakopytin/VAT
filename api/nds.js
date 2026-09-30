@@ -154,7 +154,7 @@ function loadAll(entity,extra){
   return next();
 }
 
-function calc(txMonth,txAll,cats,plsData,rng){
+function calc(txMonth,txAll,cats,plsData,rng,bankAccts){
   var cMap={};
   cats.forEach(function(c){cMap[c.id]=c.name||"";});
 
@@ -166,6 +166,14 @@ function calc(txMonth,txAll,cats,plsData,rng){
     if(tx.date<rng.s0){if(VSIP[aid])vSt+=inc-out;if(TT[aid])tSt+=inc-out;}
     if(tx.date<=rng.s1){if(VSIP[aid])vEnd+=inc-out;if(TT[aid])tEnd+=inc-out;}
   });
+  // Начальный остаток (fixed_balance из bank_account — не транзакция)
+  if(bankAccts){bankAccts.forEach(function(ba){
+    var fb=parseFloat(ba.fixed_balance)||0,fbd=ba.fixed_balance_date||'';
+    if(!fb||!fbd)return;
+    var baid=+ba.id;
+    if(VSIP[baid]){if(fbd<rng.s0)vSt+=fb;if(fbd<=rng.s1)vEnd+=fb;}
+    if(TT[baid]){if(fbd<rng.s0)tSt+=fb;if(fbd<=rng.s1)tEnd+=fb;}
+  });}
 
   var vPr=0,tPr=0,vPjIn=0,tPjIn=0,piP_v={},piP_t={};
   var vRefund=0,tRefund=0,vPoIn=0,tPoIn=0;
@@ -869,9 +877,10 @@ function load(reset){
     loadAll("categories"),
     loadAll("transaction_pls",{"filter[category_id]":"3144,3147"}).catch(function(){return[];}),
     loadAll("plan_money").catch(function(){return[];}),
-    loadAll("transaction",{"filter[org_account_id]":"149,150","filter[category_id]":"3144,3147"}).catch(function(){return[];})
+    loadAll("transaction",{"filter[org_account_id]":"149,150","filter[category_id]":"3144,3147"}).catch(function(){return[];}),
+    loadAll("bank_account").catch(function(){return[];})
   ]).then(function(res){
-    var txAll=res[0],cats=res[1],pls=res[2];
+    var txAll=res[0],cats=res[1],pls=res[2],bankAccts=res[5];
     var rng=getRange();
     // Предыдущий квартал
     var currY=parseInt(rng.s0.slice(0,4),10),currQ=Math.ceil(parseInt(rng.s0.slice(5,7),10)/3);
@@ -978,7 +987,7 @@ function load(reset){
     var rCur=txCurMonth.length?calc(txCurMonth,txAll,cats,pls,{s0:m0,s1:m1,d0:m0,d1:m1,label:'М',ymd:currMon}):null;
     var txM=txAll.filter(function(tx){return tx.date&&tx.date>=rng.s0&&tx.date<=rng.s1;});
     if(txM.length){
-      var r=calc(txM,txAll,cats,pls,rng);
+      var r=calc(txM,txAll,cats,pls,rng,bankAccts);
       r.mVatIn=mVatIn;r.mVatOut=mVatOut;r.mVatBal=mVatIn-mVatOut;
       r.pVatIn=0;r.pVatOut=0;r.pVatBal=0;
       r.planInc=planInc;r.planOut=planOut;
