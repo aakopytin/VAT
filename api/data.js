@@ -5,7 +5,9 @@
 
 const https = require('https');
 
-const GET_ALLOWED = ['plan_money', 'transaction', 'categories', 'transaction_pls', 'bank_account'];
+const GET_ALLOWED = ['plan_money', 'transaction', 'categories', 'transaction_pls', 'bank_account', 'crm_account'];
+// Сущности не из модуля fin: entity → путь module/entity в Aspro API
+const ENTITY_PATH = { crm_account: 'crm/account' };
 const ALLOWED = ['plan_money', 'transaction', 'categories', 'transaction_pls', 'bank_account'];
 const PAGE_SIZE = 100;
 
@@ -63,7 +65,7 @@ module.exports = async function handler(req, res) {
 
     const rawDomain = (process.env.ASPRO_DOMAIN || '2cec.aspro.cloud')
       .replace(/^https?:\/\//i, '').replace(/\/+$/, '');
-    const url = 'https://' + rawDomain + '/api/v1/module/fin/' + entity + '/list'
+    const url = 'https://' + rawDomain + '/api/v1/module/' + (ENTITY_PATH[entity] || ('fin/' + entity)) + '/list'
       + '?api_key=' + encodeURIComponent(apiKey)
       + '&limit=' + limit + '&page=' + page;
 
