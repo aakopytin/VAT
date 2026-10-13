@@ -857,19 +857,106 @@ function render(r,live){
     +'<div style="margin-top:5px;font-size:11px;color:#9ca3af">обновлено: '+new Date().toLocaleTimeString("ru-RU")+'</div>';
 }
 
-function renderPoDet(poDet){
-  if(!poDet||!poDet.length)return;
-  var d=document.createElement("details"),s=document.createElement("summary");
-  var tot=poDet.reduce(function(a,p){return a+p.out;},0);
-  s.textContent="Прочие расходы ("+poDet.length+" тр. на "+fmtI(tot)+" р.)";
-  d.appendChild(s);
-  var t=document.createElement("table");t.style.cssText="width:100%;border-collapse:collapse;margin-top:4px";
-  poDet.sort(function(a,b){return b.out-a.out;}).forEach(function(p){
-    var tr=document.createElement("tr");
-    tr.innerHTML="<td style='padding:2px 4px;font-size:10px;color:#666'>"+p.date+"</td><td style='padding:2px 4px;font-size:10px;color:#666'>"+p.cat+"</td><td style='padding:2px 4px;font-size:10px;text-align:right'>"+fmtI(p.out)+"</td>";
-    t.appendChild(tr);
+// ─── Платежи квартала с НДС (раскрывающаяся таблица внизу) ─────────────────
+// Источник: PLS 3144 (НДС к вычету) → транзакция-оплата по reference_id.
+// Исключаются: переводы ВСИП↔ТТ (проект 27, кат. переводов), уплата налогов/ЕНП (кат. 3142/3144/1009).
+var PNF={1:"Кемерово",2:"Рассказово",3:"Южно-Сахалинск",4:"Омутнинск",5:"Строитель",6:"Десногорск",7:"Иволгинск",8:"ОКО",9:"Рузаевка",10:"Большое Болдино",11:"Новокуйбышевск",12:"Киров",13:"Барнаул",14:"Тамбов",15:"Одинцово",16:"Покровское",17:"Анадырь",18:"Уни",19:"Красногорское",20:"Чечня",21:"Сити",22:"Москва (Новгородская)",23:"Сыктывкар",24:"ВСИП Общие",25:"Типовой",26:"ТТ Общие",28:"Проект СМ",29:"Первомайское",30:"Угловское",31:"Тогул",32:"Менжинского",33:"Голутвинский",34:"Толбазы",35:"Прочие/Закрытые",36:"Корректировки НДС"};
+var vpF={payer:"",proj:"",mon:""},vpOpen=false,crmCache=null;
+function buildVatPay(txAll,pls,cats,crm,rng){
+  var cMap={};(cats||[]).forEach(function(c){cMap[c.id]=c.name||"";});
+  var crmMap={};(crm||[]).forEach(function(a){crmMap[a.id]=a.name||a.name_legal||"";});
+  var SKIP_CAT={3142:1,3144:1,1009:1,3147:1,1004:1,1007:1};
+  // НДС по reference_id
+  var vatByRef={};
+  (pls||[]).forEach(function(p){
+    if(p.category_id!==3144||!p.reference_id)return;
+    if(!p.date||p.date<rng.s0||p.date>rng.s1)return;
+    if(p.project_id===27)return;
+    var v=(_ddsNum(p.outcome)||0)-(_ddsNum(p.income)||0);
+    if(!v)return;
+    vatByRef[p.reference_id]=(vatByRef[p.reference_id]||0)+v;
   });
-  d.appendChild(t);document.getElementById("root").appendChild(d);
+  // Транзакции-оплаты по reference_id
+  var byRef={};
+  (txAll||[]).forEach(function(tx){
+    var ref=tx.reference_id;if(!ref||!vatByRef[ref])return;
+    if(!tx.date||tx.date<rng.s0||tx.date>rng.s1)return;
+    var out=_ddsNum(tx.outcome)||0;if(!out)return;
+    if(SKIP_CAT[tx.category_id]||tx.project_id===27)return;
+    var cn=cMap[tx.category_id]||"";if(AC[cn]==="tr")return;
+    var aid=tx.org_account_id,payer=VSIP[aid]?"ВСИП":VP[aid]?"ВСИП Прочие":TT[aid]?"ТТ":"";
+    if(!payer)return;
+    var g=byRef[ref];
+    if(!g){g=byRef[ref]={date:tx.date,pid:tx.project_id||0,crm:tx.crm_account_id||0,payer:payer,sum:0};}
+    g.sum+=out;
+    if(tx.date<g.date)g.date=tx.date;
+  });
+  var rows=[];
+  Object.keys(byRef).forEach(function(ref){
+    var g=byRef[ref],vat=vatByRef[ref];
+    rows.push({date:g.date,mon:g.date.slice(0,7),payer:g.payer,pid:g.pid,
+      proj:PNF[g.pid]||(g.pid?("Проект "+g.pid):"Без проекта"),
+      crm:crmMap[g.crm]||(g.crm?("id "+g.crm):"—"),sum:g.sum,net:g.sum-vat,vat:vat});
+  });
+  rows.sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:b.sum-a.sum;});
+  return rows;
+}
+function renderVatPay(rows,rng){
+  var root=document.getElementById("root");
+  var old=document.getElementById("vpay");if(old)old.parentNode.removeChild(old);
+  var d=document.createElement("details");d.id="vpay";d.style.marginTop="8px";
+  if(vpOpen)d.open=true;
+  d.addEventListener("toggle",function(){vpOpen=d.open;});
+  var s=document.createElement("summary");d.appendChild(s);
+  function uniq(key,lbl){var o={};rows.forEach(function(r){o[r[key]]=lbl?lbl(r):r[key];});return o;}
+  var SEL="font-size:11px;border:1px solid #d1d5db;border-radius:3px;padding:1px 4px;color:#374151;background:#fff;margin-right:6px";
+  function sel(id,title,map,cur){
+    var h="<select id='"+id+"' style='"+SEL+"'><option value=''>"+title+": все</option>";
+    Object.keys(map).sort(function(a,b){return String(map[a]).localeCompare(String(map[b]),"ru");}).forEach(function(k){
+      h+="<option value='"+k+"'"+(k===cur?" selected":"")+">"+map[k]+"</option>";});
+    return h+"</select>";
+  }
+  var monMap={};
+  var y=parseInt(rng.s0.slice(0,4),10),m0=parseInt(rng.s0.slice(5,7),10);
+  for(var i=0;i<3;i++){var mm=m0+i,k=y+"-"+(mm<10?"0":"")+mm;monMap[k]=MONTHS_RU[mm];}
+  var payMap=uniq("payer"),projMap=uniq("proj");
+  // сбросить фильтр, если значения нет в текущем квартале
+  if(vpF.payer&&!payMap[vpF.payer])vpF.payer="";
+  if(vpF.proj&&!projMap[vpF.proj])vpF.proj="";
+  if(vpF.mon&&!monMap[vpF.mon])vpF.mon="";
+  var fb=document.createElement("div");fb.style.cssText="margin:4px 0";
+  fb.innerHTML=sel("vpPayer","Плательщик",payMap,vpF.payer)+sel("vpProj","Проект",projMap,vpF.proj)+sel("vpMon","Месяц",monMap,vpF.mon);
+  d.appendChild(fb);
+  var box=document.createElement("div");d.appendChild(box);
+  var TH="padding:2px 4px;font-size:10px;color:#6b7280;font-weight:600;border-bottom:1px solid #d1d5db;white-space:nowrap";
+  var TD="padding:2px 4px;font-size:10px;color:#374151;border-bottom:1px solid #f0f0f0;white-space:nowrap";
+  function draw(){
+    var f=rows.filter(function(r){
+      return (!vpF.payer||r.payer===vpF.payer)&&(!vpF.proj||r.proj===vpF.proj)&&(!vpF.mon||r.mon===vpF.mon);});
+    var tS=0,tN=0,tV=0;f.forEach(function(r){tS+=r.sum;tN+=r.net;tV+=r.vat;});
+    s.textContent="Платежи с НДС ("+f.length+(f.length!==rows.length?" из "+rows.length:"")+" тр. · "+fmtI(Math.round(tS))+" р. · НДС "+fmtI(Math.round(tV))+" р.)";
+    var h="<table style='width:100%;border-collapse:collapse;margin-top:2px'><tr>"
+      +"<td style='"+TH+"'>Дата</td><td style='"+TH+"'>Плательщик</td><td style='"+TH+"'>Проект</td><td style='"+TH+"'>Контрагент</td>"
+      +"<td style='"+TH+";text-align:right'>Сумма платежа</td><td style='"+TH+";text-align:right'>Без НДС</td><td style='"+TH+";text-align:right'>НДС</td></tr>";
+    f.forEach(function(r){
+      var dt=r.date.slice(8,10)+"."+r.date.slice(5,7)+"."+r.date.slice(0,4);
+      h+="<tr><td style='"+TD+"'>"+dt+"</td><td style='"+TD+"'>"+r.payer+"</td><td style='"+TD+"'>"+r.proj+"</td>"
+        +"<td style='"+TD+";white-space:normal'>"+r.crm+"</td>"
+        +"<td style='"+TD+";text-align:right'>"+fmtI(Math.round(r.sum))+"</td>"
+        +"<td style='"+TD+";text-align:right'>"+fmtI(Math.round(r.net))+"</td>"
+        +"<td style='"+TD+";text-align:right'>"+fmtI(Math.round(r.vat))+"</td></tr>";
+    });
+    h+="<tr style='background:#f3f4f6;font-weight:600'><td colspan='4' style='"+TD+";text-align:right'>Итого</td>"
+      +"<td style='"+TD+";text-align:right'>"+fmtI(Math.round(tS))+"</td><td style='"+TD+";text-align:right'>"+fmtI(Math.round(tN))+"</td>"
+      +"<td style='"+TD+";text-align:right'>"+fmtI(Math.round(tV))+"</td></tr></table>";
+    box.innerHTML=h;
+  }
+  root.appendChild(d);
+  ["vpPayer","vpProj","vpMon"].forEach(function(id){
+    document.getElementById(id).addEventListener("change",function(e){
+      var key=id==="vpPayer"?"payer":id==="vpProj"?"proj":"mon";vpF[key]=e.target.value;draw();});
+  });
+  draw();
 }
 
 function load(reset){
@@ -883,7 +970,8 @@ function load(reset){
     loadAll("transaction_pls",{"filter[category_id]":"3144,3147"}).catch(function(){return[];}),
     loadAll("plan_money").catch(function(){return[];}),
     loadAll("transaction",{"filter[org_account_id]":"149,150","filter[category_id]":"3144,3147"}).catch(function(){return[];}),
-    loadAll("bank_account").catch(function(){return[];})
+    loadAll("bank_account").catch(function(){return[];}),
+    (crmCache?Promise.resolve(crmCache):loadAll("crm_account").then(function(a){crmCache=a;return a;}).catch(function(){return[];}))
   ]).then(function(res){
     var txAll=res[0],cats=res[1],pls=res[2],bankAccts=res[5];
     var rng=getRange();
@@ -1038,7 +1126,7 @@ function load(reset){
       r.prevR=rPrev;
       r.estPlanVatIn=estPlanVatIn;r.estPlanVatOut=estPlanVatOut;
       el.innerHTML=render(r,true);
-      renderPoDet(r.poDet);
+      renderVatPay(buildVatPay(txAll,pls,cats,res[6],rng),rng);
       attachAdj();
     }else{
       el.innerHTML="<div style='padding:12px;font-size:11px;color:#666'>Нет данных за "+rng.label+" ("+rng.s0+" — "+rng.s1+")</div>";
